@@ -45,7 +45,7 @@ flowchart LR
 | **OpenAlex** | Ha — eng to‘liq manba: `/works?filter=authorships.author.orcid:{iD}` | Yo‘q (Crossref va DataCite’dan o‘zi oladi) | 2026-fevraldan API kalit kerak; bepul kalit kuniga $1 kredit (~10 000 ta ro‘yxat so‘rovi) | Asosiy import manbai |
 | **Crossref** | Qisman — faqat nashriyot iD’ni kiritgan ishlar: `/works?filter=orcid:{iD}` | Faqat a’zo tashkilot DOI ro‘yxatdan o‘tkazadi | Ro‘yxat so‘rovlari 1–3 so‘rov/s. **O‘zbekiston GEM ro‘yxatida — a’zolik to‘lovlari olinmaydi** | Metadata boyitish; universitet jurnaliga bepul DOI imkoniyati |
 | **DataCite** | Ha: `api.datacite.org/dois?user-id={iD}` | Zenodo orqali | Bepul | ORCID auto-update |
-| **Zenodo** | Ha: `/api/records?q=creators.orcid:"{iD}"` | **Ha** — REST API, bepul DOI (`10.5281/zenodo.N`), `sandbox.zenodo.org` | Bepul; legacy API’da fayl ≤100 MB, 100 so‘rov/daqiqa | Asosiy joylash kanali |
+| **Zenodo** | Ha: `/api/records?q=creators.orcid:"{iD}"` | **Ha** — REST API, bepul DOI (`10.5281/zenodo.N`), `sandbox.zenodo.org`. Faqat o‘qituvchining o‘z akkaunti orqali (OAuth) | Bepul; yozuvga 50 GB, 100 so‘rov/daqiqa. Taqiqlangan: AI yozgan kontent, faqat annotatsiyadan iborat yozuv, ommaviy "DOI fabrikasi" | Asosiy joylash kanali (shartlari 6-bo‘limda) |
 | **Google Scholar** | Rasmiy API yo‘q. SerpApi faqat Scholar ID bilan ishlaydi, pullik; Google 2025-dekabrda SerpApi’ni sudga bergan | Yo‘q — faqat crawl | Bepul | Har bir maqola uchun alohida sahifa, `citation_*` teglar, sitemap. Scraping qilmaymiz |
 | **ResearchGate** | API yo‘q; scraping ToS bo‘yicha taqiqlangan | Yo‘q | — | O‘qituvchiga tayyor ma’lumot va qo‘lda qo‘shish yo‘riqnomasi |
 | **Scopus** | Faqat obunachi tashkilot IP’sidan yoki `insttoken` bilan: Author Search `ORCID()` → AU-ID → hujjatlar | Yo‘q — faqat CSAB tasdiqlagan jurnallar | Obuna; notijorat foydalanish | Ixtiyoriy: universitet obunasi bo‘lsa ulaymiz |
@@ -217,6 +217,7 @@ sequenceDiagram
   G-->>S: crawl (bir necha kundan haftagacha)
 ```
 
+- **Zenodo’ni ulash:** o‘qituvchi kabinetda o‘z Zenodo akkauntini OAuth orqali ulaydi (Zenodo’ga ORCID bilan kirish tavsiya etiladi), shunda yuklovchi muallifning o‘zi bo‘ladi. Chop etishdan oldin o‘qituvchi yakuniy ko‘rinishni tasdiqlaydi — chop etilgan yozuvni o‘chirib bo‘lmaydi.
 - **Onboarding sharti:** o‘qituvchi DataCite Commons’da "ORCID Auto-Update" ni **birinchi Zenodo yuklashidan oldin** yoqishi kerak — u faqat yoqilgandan keyin ro‘yxatdan o‘tgan DOI’larni ORCID’ga yuboradi.
 - **Google Scholar talablari:** har bir maqola alohida URL’da; annotatsiya login’siz ko‘rinadi; PDF ≤5 MB va matn qatlami bor; teglar `citation_title`, `citation_author` (har bir muallif uchun alohida), `citation_publication_date`, `citation_pdf_url`; bosh sahifadan ko‘pi bilan 10 ta havola orqali yetib borish mumkin.
 - **Qo‘lda kanallar** (ResearchGate, mahalliy jurnallar): `distributions.status = manual_pending`, o‘qituvchi yoki operatorga nusxa olishga tayyor metadata va havola ko‘rsatiladi.
@@ -227,7 +228,13 @@ sequenceDiagram
 - **Drizzle ORM**: sxema TypeScript’da, SQL’ga yaqin, kod generatsiyasi yo‘q.
 - **Telegram orqali kod**: SMS-provayder xarajati yo‘q, Telegram O‘zbekistonda keng tarqalgan. Kanal almashtiriladigan qilib yozilgan — kerak bo‘lsa SMS (masalan, Eskiz) qo‘shiladi.
 - **ORCID hozircha qo‘lda kiritiladi**, ya’ni "tasdiqlanmagan" (`users.orcid_verified_at`). Nazorat raqami va iD mavjudligi tekshiriladi, lekin birov boshqa odamning iD’sini yozishi mumkin. 2-bosqichda "Sign in with ORCID" (`/authenticate` — bepul) qo‘shiladi va tarqatish faqat tasdiqlangan iD uchun ochiladi.
-- **Mualliflik huquqi:** jurnalda allaqachon chop etilgan maqolani Zenodo’ga qayta yuklash nashriyot siyosatiga bog‘liq. Yuklashda o‘qituvchi huquqini tasdiqlaydi. Chop etilgan maqola uchun "faqat metadata + jurnal DOI havolasi" rejimi bo‘ladi.
+- **Mualliflik huquqi:** jurnalda allaqachon chop etilgan maqolani Zenodo’ga qayta yuklash nashriyot siyosatiga bog‘liq. Yuklashda o‘qituvchi huquqini tasdiqlaydi. Chop etilgan maqola uchun "faqat annotatsiya + jurnal DOI havolasi" rejimi **faqat bizning saytda** bo‘ladi, chunki Zenodo faqat annotatsiyadan iborat yozuvni qabul qilmaydi.
+- **Zenodo qoidalari** (2026-oktyabrda tekshirilgan):
+  - **Javobgarlik:** yuklovchi o‘z kontenti uchun to‘liq javobgar.
+  - **Mos emas deb belgilangan kontent:** inson tadqiqotiga asoslanmagan AI kontent (siyosat 2026-yil 27-aprel), faqat annotatsiyadan iborat yozuvlar, talabalar topshiriqlari va *"DOI to‘lovidan qochish uchun nashriyotning ommaviy yuklashi"*. 2026-yilda bitta akkauntning 850 dan ortiq yozuvi ogohlantirishsiz o‘chirilgan.
+  - **Shuning uchun:** barcha maqolani bitta platforma akkauntidan **yuklamaymiz** — har bir o‘qituvchi o‘z akkaunti orqali, OAuth bilan yuklaydi. Yuklashdan oldin sifat nazorati bo‘ladi: o‘qituvchi huquqini tasdiqlaydi, AI ishlatgan bo‘lsa ochiq aytadi, operator ko‘rib chiqadi.
+  - **Ko‘p DOI kerak bo‘lsa** (universitet jurnali, to‘plamlar), Zenodo emas, universitetning Crossref a’zoligi kerak.
+  - Manbalar: [shartlar](https://about.zenodo.org/terms/), [siyosatlar](https://about.zenodo.org/policies/), [mos bo‘lmagan kontent](https://support.zenodo.org/help/en-gb/2-content/141-what-content-is-not-suitable-for-zenodo), [GitHub #2606](https://github.com/zenodo/zenodo/issues/2606).
 - **Litsenziyalar:** ORCID Public API va Scopus API notijorat. Xizmat pullik bo‘lsa, ORCID a’zoligi (universitet nomidan yoki konsorsium orqali) kerak.
 - Google Scholar va ResearchGate **scraping qilinmaydi** (ToS, huquqiy xavf).
 
