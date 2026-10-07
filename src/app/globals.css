@@ -1,0 +1,192 @@
+@import "tailwindcss";
+
+:root {
+  /* Samarqand koshinlaridan: lojuvard (asosiy) va firuza (urg‘u) */
+  --mist: #f1f4f9;
+  --paper: #ffffff;
+  --ink: #15213b;
+  --muted: #5a6478;
+  --line: #d6dde8;
+  --lapis: #1f3c8f;
+  --lapis-deep: #172d6c;
+  --on-lapis: #ffffff;
+  --tile: #0f7b83;
+  --tile-soft: #e3f3f2;
+  --danger: #b42318;
+  --danger-soft: #fdecea;
+  --telegram: #229ed9;
+  --orcid: #a6ce39;
+  /* Qog‘oz varag‘i — mavzudan qat’i nazar doim yorug‘ */
+  --sheet: #ffffff;
+  --sheet-ink: #15213b;
+  --sheet-muted: #5a6478;
+  --sheet-line: #d6dde8;
+  --sheet-accent: #0f7b83;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --mist: #0d1424;
+    --paper: #141d31;
+    --ink: #e6ebf5;
+    --muted: #9aa6bd;
+    --line: #2a3650;
+    --lapis: #8fb0ff;
+    --lapis-deep: #b8ccff;
+    --on-lapis: #0d1424;
+    --tile: #4fc2c0;
+    --tile-soft: #12302f;
+    --danger: #ff8a80;
+    --danger-soft: #3a1714;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-mist: var(--mist);
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-lapis: var(--lapis);
+  --color-lapis-deep: var(--lapis-deep);
+  --color-on-lapis: var(--on-lapis);
+  --color-tile: var(--tile);
+  --color-tile-soft: var(--tile-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-telegram: var(--telegram);
+  --color-orcid: var(--orcid);
+  --color-sheet: var(--sheet);
+  --color-sheet-ink: var(--sheet-ink);
+  --color-sheet-muted: var(--sheet-muted);
+  --color-sheet-line: var(--sheet-line);
+  --color-sheet-accent: var(--sheet-accent);
+  --font-serif: var(--font-literata), Georgia, serif;
+  --font-sans: var(--font-onest), system-ui, sans-serif;
+}
+
+body {
+  background: var(--mist);
+  color: var(--ink);
+}
+
+::selection {
+  background: var(--tile-soft);
+}
+
+:focus-visible {
+  outline: 2px solid var(--tile);
+  outline-offset: 2px;
+}
+
+@layer components {
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border: 1px solid transparent;
+    border-radius: 0.5rem;
+    padding: 0.625rem 1rem;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+      background-color 0.15s,
+      border-color 0.15s,
+      color 0.15s;
+  }
+  .btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+  .btn-lg {
+    padding: 0.8125rem 1.375rem;
+    font-size: 1rem;
+  }
+  .btn-primary {
+    background: var(--lapis);
+    color: var(--on-lapis);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--lapis-deep);
+  }
+  .btn-secondary {
+    background: var(--paper);
+    border-color: var(--line);
+    color: var(--ink);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    border-color: var(--muted);
+  }
+  .btn-ghost {
+    color: var(--ink);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--ink) 7%, transparent);
+  }
+  .btn-telegram {
+    background: var(--telegram);
+    color: #ffffff;
+  }
+  .btn-telegram:hover {
+    background: #1b8cc2;
+  }
+
+  .input {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 0.5rem;
+    background: var(--paper);
+    color: var(--ink);
+    padding: 0.625rem 0.75rem;
+    font-size: 1rem; /* 16px — iOS fokusda sahifani kattalashtirmaydi */
+  }
+  .input::placeholder {
+    color: color-mix(in oklab, var(--muted) 70%, transparent);
+  }
+  .input:focus {
+    outline: none;
+    border-color: var(--tile);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--tile) 25%, transparent);
+  }
+  .input[aria-invalid="true"] {
+    border-color: var(--danger);
+  }
+  .input:disabled {
+    opacity: 0.6;
+  }
+
+  .link {
+    color: var(--lapis);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+  }
+}
+
+/* Joylash varaqasi qatorlari ketma-ket paydo bo‘ladi — sahifadagi yagona animatsiya */
+@keyframes slip-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.slip-row {
+  opacity: 0;
+  animation: slip-in 0.5s ease-out forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .slip-row {
+    opacity: 1;
+    animation: none;
+  }
+}
