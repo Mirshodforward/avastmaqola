@@ -1,0 +1,30 @@
+CREATE TABLE "profiles" (
+	"user_id" uuid PRIMARY KEY NOT NULL,
+	"slug" text NOT NULL,
+	"patronymic" text,
+	"published_name" text,
+	"position" text NOT NULL,
+	"academic_degree" text,
+	"academic_title" text,
+	"institution" text DEFAULT 'Asman Universiteti' NOT NULL,
+	"department" text,
+	"direction" text NOT NULL,
+	"bio" text,
+	"keywords" text[] DEFAULT '{}'::text[] NOT NULL,
+	"google_scholar_url" text,
+	"scopus_author_id" text,
+	"researcher_id" text,
+	"researchgate_url" text,
+	"website_url" text,
+	"public_email" text,
+	"photo_key" text,
+	"is_public" boolean DEFAULT true NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "profiles_slug_unique" UNIQUE("slug"),
+	CONSTRAINT "profiles_slug_format" CHECK ("profiles"."slug" ~ '^[a-z0-9]+(-[a-z0-9]+)*$'),
+	CONSTRAINT "profiles_degree_valid" CHECK ("profiles"."academic_degree" in ('phd', 'dsc', 'fan_nomzodi', 'fan_doktori')),
+	CONSTRAINT "profiles_title_valid" CHECK ("profiles"."academic_title" in ('dotsent', 'professor', 'katta_ilmiy_xodim'))
+);
+--> statement-breakpoint
+ALTER TABLE "profiles" ADD CONSTRAINT "profiles_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;

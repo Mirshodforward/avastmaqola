@@ -1,49 +1,37 @@
 import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { and, eq, gt, sql } from "drizzle-orm";
-import { db, type Db, type Tx } from "../db";
+import { db } from "../db";
 import { sessions, users } from "../db/schema";
-import { AUTH, FLOW_COOKIE, FLOW_COOKIE_PATH, SESSION_COOKIE } from "./config";
-import { newToken, sha256 } from "./crypto";
+import { AUTH, FLOW_COOKIE, FLOW_COOKIE_PATH, REFRESH_COOKIE, SESSION_COOKIE } from "./config";
+import { parseRefreshToken, readAccessToken } from "./crypto";
+import { AuthError } from "./errors";
+import { accessCookieOptions, refreshCookieOptions, type SessionTokens } from "./tokens";
 
 export type SessionUser = {
   id: string;
   firstName: string;
   lastName: string;
   phone: string;
-  orcid: string;
+  orcid: string | null;
   orcidVerified: boolean;
   role: string;
 };
 
 const secure = process.env.NODE_ENV === "production";
 
-export async function createSession(
-  executor: Db | Tx,
-  userId: string,
-  meta: { ip: string | null; userAgent: string | null },
-) {
-  const token = newToken();
-  const [row] = await executor
-    .insert(sessions)
-    .values({
-      userId,
-      tokenHash: sha256(token),
-      expiresAt: sql`now() + make_interval(days => ${AUTH.sessionTtlDays})`,
-      ip: meta.ip,
-      userAgent: meta.userAgent?.slice(0, 300) ?? null,
-    })
-    .returning({ expiresAt: sessions.expiresAt });
-  return { token, expiresAt: row.expiresAt };
-}
-
-/** Joriy foydalanuvchi (bitta so‘rov ichida bir marta o‘qiladi). Sessiya bo‘lmasa — null. */
+/**
+ * Joriy foydalanuvchi (bitta so‘rov ichida bir marta o‘qiladi). Sessiya bo‘lmasa — null.
+ * Access token muddati o‘tgan bo‘lsa, uni proxy.ts refresh token bilan allaqachon yangilagan bo‘ladi.
+ */
 export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
-  const token = (await cookies()).get(SESSION_COOKIE)?.value;
-  if (!token) return null;
+  const access = readAccessToken((await cookies()).get(SESSION_COOKIE)?.value);
+  if (!access) return null;
 
+  // Imzo to‘g‘ri bo‘lsa ham sessiya qatori tekshiriladi: chiqish yoki o‘g‘irlikda token darhol ishlamay qoladi.
+  // Muddat baza soati bilan: render paytida Date.now() o‘qilmaydi (Next 16 uni beqaror qiymat deb hisoblaydi)
   const [row] = await db
     .select({
       id: users.id,
@@ -56,13 +44,39 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
     })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
-    .where(and(eq(sessions.tokenHash, sha256(token)), gt(sessions.expiresAt, sql`now()`)))
+    .where(
+      and(
+        eq(sessions.id, access.sessionId),
+        gt(sessions.expiresAt, sql`now()`),
+        sql`${access.exp} > extract(epoch from now())`,
+      ),
+    )
     .limit(1);
   if (!row) return null;
 
   const { orcidVerifiedAt, ...user } = row;
   return { ...user, orcidVerified: orcidVerifiedAt !== null };
 });
+
+/** API route’lar uchun: sessiya bo‘lmasa 401. */
+export async function requireApiUser(): Promise<SessionUser> {
+  const user = await getCurrentUser();
+  if (!user) throw new AuthError("unauthorized");
+  return user;
+}
+
+export async function requireApiAdmin(): Promise<SessionUser> {
+  const user = await requireApiUser();
+  if (user.role !== "admin") throw new AuthError("forbidden");
+  return user;
+}
+
+/** Admin sahifalari: boshqalarga 404 — bo‘lim borligini ham oshkor qilmaymiz. */
+export async function requireAdminPage(): Promise<SessionUser> {
+  const user = await requireUser();
+  if (user.role !== "admin") notFound();
+  return user;
+}
 
 /** Himoyalangan sahifalar uchun: sessiya bo‘lmasa /login’ga yo‘naltiradi. */
 export async function requireUser(): Promise<SessionUser> {
@@ -71,21 +85,21 @@ export async function requireUser(): Promise<SessionUser> {
   return user;
 }
 
-export async function setSessionCookie(token: string, expiresAt: Date) {
-  (await cookies()).set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure,
-    sameSite: "lax",
-    path: "/",
-    expires: expiresAt,
-  });
+export async function setSessionCookies(tokens: SessionTokens) {
+  const store = await cookies();
+  store.set(SESSION_COOKIE, tokens.accessToken, accessCookieOptions());
+  store.set(REFRESH_COOKIE, tokens.refreshToken, refreshCookieOptions(tokens.expiresAt));
 }
 
+/** Chiqish: sessiya qatori o‘chiriladi — access va refresh token ikkalasi ham darhol yaroqsiz */
 export async function destroyCurrentSession() {
   const store = await cookies();
-  const token = store.get(SESSION_COOKIE)?.value;
-  if (token) await db.delete(sessions).where(eq(sessions.tokenHash, sha256(token)));
+  // Muddati o‘tgan bo‘lsa ham imzosi to‘g‘ri access token sessiyani aniqlashga yetadi
+  const sessionId =
+    readAccessToken(store.get(SESSION_COOKIE)?.value)?.sessionId ?? parseRefreshToken(store.get(REFRESH_COOKIE)?.value);
+  if (sessionId) await db.delete(sessions).where(eq(sessions.id, sessionId));
   store.set(SESSION_COOKIE, "", { path: "/", maxAge: 0 });
+  store.set(REFRESH_COOKIE, "", { path: "/", maxAge: 0 });
 }
 
 export async function setFlowCookie(token: string) {

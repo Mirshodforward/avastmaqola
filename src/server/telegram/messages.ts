@@ -8,14 +8,16 @@ export const CONTACT_BUTTON = "📱 Kontaktni yuborish";
 export const MESSAGES = {
   welcome:
     `Assalomu alaykum! Bu ${BRAND} saytining boti.\n\n` +
-    "Ro‘yxatdan o‘tish yoki kirish uchun saytdagi «Telegram’da ochish» tugmasini bosing — " +
+    "Ro‘yxatdan o‘tish yoki kirish uchun saytdagi «Kodni olish» tugmasini bosing — " +
     "shunda bot telefon raqamingizni tasdiqlashni so‘raydi.",
   help:
-    "Kod olish uchun saytdagi «Telegram’da ochish» tugmasini bosing, " +
+    "Kod olish uchun saytdagi «Kodni olish» tugmasini bosing, " +
     `so‘ng shu yerda «${CONTACT_BUTTON}» tugmasini bosing.`,
   linkInvalid: "Havola eskirgan yoki noto‘g‘ri. Saytga qaytib, jarayonni qaytadan boshlang.",
-  codeAlreadySent:
-    "Kod allaqachon yuborilgan. Uni saytda kiriting yoki saytdagi «Kodni qayta yuborish» tugmasini bosing.",
+  codeWait: (seconds: number) =>
+    `Kod yaqinda yuborildi. Yangisini ${seconds} soniyadan keyin olishingiz mumkin — ` +
+    "oldingi kod hali amal qilsa, o‘shani saytda kiriting.",
+  codesExhausted: "Bu urinish uchun kodlar limiti tugadi. Saytda jarayonni qaytadan boshlang.",
   notOwnContact: `Faqat o‘zingizning raqamingizni pastdagi «${CONTACT_BUTTON}» tugmasi orqali yuboring.`,
   noFlow:
     "Faol so‘rov topilmadi. Saytda «Ro‘yxatdan o‘tish» yoki «Kirish» tugmasini qaytadan bosing.",
@@ -50,7 +52,8 @@ export function sendCode(chatId: number, code: string) {
     chatId,
     `Tasdiqlash kodi: <code>${code}</code>\n\n` +
       `Kod ${AUTH.codeTtlSeconds / 60} daqiqa amal qiladi. Uni saytdagi maydonga kiriting.\n` +
-      `Kodni hech kimga bermang — ${BRAND} xodimlari uni hech qachon so‘ramaydi.`,
+      `Kodni hech kimga bermang — ${BRAND} xodimlari uni hech qachon so‘ramaydi.\n` +
+      "Saytga kirishni siz boshlamagan bo‘lsangiz, bu xabarga e’tibor bermang.",
     { parse_mode: "HTML", reply_markup: { remove_keyboard: true } },
   );
 }

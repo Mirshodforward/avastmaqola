@@ -1,8 +1,8 @@
 import "server-only";
 import { z } from "zod";
-import { NAME_PATTERN, normalizeOrcid, normalizeUzPhone } from "@/lib/validation";
+import { NAME_PATTERN, normalizeUzPhone } from "@/lib/validation";
 
-const personName = (label: string) =>
+export const personName = (label: string) =>
   z
     .string()
     .trim()
@@ -15,19 +15,11 @@ const phone = z
   .refine((v) => normalizeUzPhone(v) !== null, "Raqamni +998901234567 ko‘rinishida kiriting")
   .transform((v) => normalizeUzPhone(v)!);
 
-const orcid = z
-  .string()
-  .refine(
-    (v) => normalizeOrcid(v) !== null,
-    "ORCID iD noto‘g‘ri. U 0000-0000-0000-0000 ko‘rinishida bo‘ladi",
-  )
-  .transform((v) => normalizeOrcid(v)!);
-
+// ORCID iD bu yerda so‘ralmaydi — u profil tahririda kiritiladi
 export const registerSchema = z.object({
   firstName: personName("Ism"),
   lastName: personName("Familiya"),
   phone,
-  orcid,
 });
 
 export const loginSchema = z.object({ phone });

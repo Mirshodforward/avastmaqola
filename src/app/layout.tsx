@@ -1,28 +1,36 @@
 import type { Metadata } from "next";
 import { Literata, Onest } from "next/font/google";
+import { SERVICE_NAME, SITE_NAME, siteUrl } from "@/server/site";
 import "./globals.css";
 
-// Ikkala shrift ham lotin-ext va kirill-ext (Ўў Ққ Ғғ Ҳҳ) belgilarini qo‘llaydi
+// subsets — faqat OLDINDAN yuklanadigan qism. Kirill va lotin-ext (Ўў Ққ Ғғ Ҳҳ) fayllari ham
+// self-host qilinadi, lekin sahifada shu harflar uchragandagina yuklanadi (unicode-range): 8 emas, 2 ta preload
 const literata = Literata({
-  subsets: ["latin", "latin-ext", "cyrillic", "cyrillic-ext"],
+  subsets: ["latin"],
   axes: ["opsz"],
   variable: "--font-literata",
   display: "swap",
 });
 
 const onest = Onest({
-  subsets: ["latin", "latin-ext", "cyrillic", "cyrillic-ext"],
+  subsets: ["latin"],
   variable: "--font-onest",
   display: "swap",
 });
 
+const description =
+  "Asman Universiteti o‘qituvchilarining ilmiy maqolalari va profillari: uch tilda annotatsiyalar, ochiq PDF, Google Scholar uchun moslangan sahifalar.";
+
+// canonical bu yerda YO‘Q: root layout’dagi canonical barcha sahifalarga meros bo‘lib o‘tardi
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl()),
+  applicationName: SERVICE_NAME,
   title: {
-    default: "Avtomaqola — maqola yozing, biz joylab beramiz",
-    template: "%s — Avtomaqola",
+    default: `${SITE_NAME} — ilmiy maqolalar portali`,
+    template: `%s — ${SITE_NAME}`,
   },
-  description:
-    "Universitet o‘qituvchilari uchun: maqolani bir marta yuklang, biz uni ilmiy platformalarga joylaymiz va barcha maqolalaringizni ORCID iD orqali bir ro‘yxatga yig‘amiz.",
+  description,
+  openGraph: { type: "website", siteName: SITE_NAME, locale: "uz_UZ", description },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

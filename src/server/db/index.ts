@@ -8,8 +8,10 @@ import * as schema from "./schema";
 const globalForDb = globalThis as unknown as { pgPool?: Pool };
 
 // Pool ulanishni birinchi so‘rovda ochadi, shuning uchun build paytida baza shart emas.
+// connectionTimeoutMillis: baza ishlamasa so‘rovlar osilib qolmasin, tez xato bersin
 const pool =
-  globalForDb.pgPool ?? new Pool({ connectionString: process.env.DATABASE_URL, max: 10 });
+  globalForDb.pgPool ??
+  new Pool({ connectionString: process.env.DATABASE_URL, max: 10, connectionTimeoutMillis: 5000 });
 if (process.env.NODE_ENV !== "production") globalForDb.pgPool = pool;
 
 export const db = drizzle({ client: pool, schema });

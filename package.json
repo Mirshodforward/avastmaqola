@@ -13,16 +13,19 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "bot:poll": "node scripts/telegram-poll.mjs",
-    "bot:webhook": "node scripts/telegram-set-webhook.mjs"
+    "bot:webhook": "node scripts/telegram-set-webhook.mjs",
+    "admin": "node scripts/make-admin.mjs",
+    "seed:demo": "node scripts/seed-demo.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.132.1",
     "drizzle-orm": "^0.45.3",
     "next": "16.4.0",
     "pg": "^8.23.1",
-    "qrcode": "^1.5.4",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "server-only": "^0.0.1",
+    "sharp": "^0.35.5",
     "zod": "^4.6.5"
   },
   "devDependencies": {
@@ -30,7 +33,6 @@
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^20",
     "@types/pg": "^8.23.1",
-    "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "drizzle-kit": "^0.31.11",

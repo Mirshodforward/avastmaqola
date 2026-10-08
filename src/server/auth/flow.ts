@@ -5,13 +5,12 @@ import { maskUzPhone, normalizeUzPhone } from "@/lib/validation";
 import { db, type Tx } from "../db";
 import { authRequests, users, type AuthPurpose, type AuthRequest } from "../db/schema";
 import { env } from "../env";
-import { lookupOrcid } from "../orcid/client";
 import { MESSAGES } from "../telegram/messages";
 import { AUTH } from "./config";
 import { deriveStartToken, generateOtp, hashOtp, newToken, safeEqualHex, sha256 } from "./crypto";
 import { AuthError } from "./errors";
 import type { RegisterInput } from "./schemas";
-import { createSession } from "./session";
+import { createSession } from "./tokens";
 import { decideTelegramAccountChange } from "./telegram-policy";
 
 export type ClientMeta = { ip: string | null; userAgent: string | null };
@@ -55,7 +54,6 @@ async function createFlow(values: {
   userId?: string;
   firstName?: string;
   lastName?: string;
-  orcid?: string;
 }): Promise<string> {
   const flowToken = newToken();
   await db.insert(authRequests).values({
@@ -70,19 +68,14 @@ async function createFlow(values: {
 export async function startRegistration(input: RegisterInput, meta: ClientMeta) {
   await assertRateLimit(input.phone, meta.ip);
 
-  const existing = await db
-    .select({ phone: users.phone, orcid: users.orcid })
+  const [taken] = await db
+    .select({ id: users.id })
     .from(users)
-    .where(or(eq(users.phone, input.phone), eq(users.orcid, input.orcid)));
-  if (existing.some((u) => u.phone === input.phone)) throw new AuthError("phone_taken");
-  if (existing.some((u) => u.orcid === input.orcid)) throw new AuthError("orcid_taken");
+    .where(eq(users.phone, input.phone))
+    .limit(1);
+  if (taken) throw new AuthError("phone_taken");
 
-  // ORCID javob bermasa ham ro‘yxatdan o‘tishni to‘xtatmaymiz — faqat aniq "yo‘q" bo‘lsa rad etamiz
-  const orcid = await lookupOrcid(input.orcid);
-  if (orcid.status === "not_found") throw new AuthError("orcid_not_found");
-
-  const flowToken = await createFlow({ purpose: "register", ...input, ip: meta.ip });
-  return { flowToken, orcidName: orcid.status === "found" ? orcid.name : null };
+  return { flowToken: await createFlow({ purpose: "register", ...input, ip: meta.ip }) };
 }
 
 export async function startLogin(phone: string, meta: ClientMeta) {
@@ -131,32 +124,111 @@ export async function getFlowView(flowToken: string): Promise<FlowView | null> {
 // ───────────── 2. Telegram bot tomoni ─────────────
 
 export type BindResult =
-  | { kind: "bound"; purpose: AuthPurpose }
-  | { kind: "code_already_sent" }
+  | { kind: "bound"; purpose: AuthPurpose } // kontakt kerak
+  | { kind: "code_sent"; code: string } // tanish akkaunt: kod darhol
+  | { kind: "wait"; seconds: number } // kod yaqinda yuborilgan
+  | { kind: "codes_exhausted" }
   | { kind: "invalid" };
 
-/** /start <token>: so‘rovni shu Telegram akkauntga bog‘laymiz va kontakt kutamiz. */
+/** Bot uchun jarayonning kerakli maydonlari va qayta yuborishgacha qolgan soniya */
+const botFlowColumns = {
+  id: authRequests.id,
+  purpose: authRequests.purpose,
+  status: authRequests.status,
+  userId: authRequests.userId,
+  telegramUserId: authRequests.telegramUserId,
+  codesSent: authRequests.codesSent,
+  resendInSeconds: sql<number>`greatest(0, ceil(extract(epoch from ${authRequests.lastCodeSentAt} + make_interval(secs => ${AUTH.resendCooldownSeconds}) - now())))::int`,
+};
+type BotFlow = Pick<AuthRequest, "id" | "purpose" | "status" | "userId" | "telegramUserId" | "codesSent"> & {
+  resendInSeconds: number;
+};
+
+/** /start <token> (saytdagi «Kodni olish»): so‘rovni shu Telegram akkauntga bog‘laymiz. */
 export async function bindTelegram(startToken: string, tg: TelegramIds): Promise<BindResult> {
-  const startTokenHash = sha256(startToken);
+  const [flow] = await db
+    .select(botFlowColumns)
+    .from(authRequests)
+    .where(and(eq(authRequests.startTokenHash, sha256(startToken)), gt(authRequests.expiresAt, sql`now()`)))
+    .limit(1);
+  if (!flow) return { kind: "invalid" };
+  // Kod yuborilgan jarayonni boshqa akkaunt egallay olmaydi; o‘sha akkaunt qayta bossa — yangi kod.
+  // Havolasiz /start kod bermaydi: aks holda firibgar o‘zi boshlagan kirish kodini "botda Start bosing" deb so‘rab olardi
+  if (flow.status === "code_sent") return reissueCode(flow, tg);
+  return startOnTelegram(flow, tg);
+}
+
+async function startOnTelegram(flow: BotFlow, tg: TelegramIds): Promise<BindResult> {
   const [bound] = await db
     .update(authRequests)
     .set({ telegramUserId: tg.userId, telegramChatId: tg.chatId, status: "awaiting_contact" })
+    .where(and(eq(authRequests.id, flow.id), inArray(authRequests.status, ["pending", "awaiting_contact"])))
+    .returning({ id: authRequests.id });
+  if (!bound) return { kind: "invalid" };
+
+  // Kirish va akkaunt ro‘yxatdan o‘tishda tasdiqlangan o‘sha akkaunt bo‘lsa, kontakt qayta so‘ralmaydi:
+  // raqam bu akkauntga ro‘yxatdan o‘tishda bog‘langan, kod faqat shu akkauntga boradi
+  if (flow.purpose === "login" && flow.userId) {
+    const [owner] = await db
+      .select({ telegramUserId: users.telegramUserId })
+      .from(users)
+      .where(eq(users.id, flow.userId))
+      .limit(1);
+    if (owner?.telegramUserId === tg.userId) {
+      const code = await issueCode(flow.id, "awaiting_contact", tg.userId);
+      if (code) return { kind: "code_sent", code };
+    }
+  }
+  return { kind: "bound", purpose: flow.purpose };
+}
+
+/** Kod yuborilgan jarayonda yangi kod: saytdagi «Kodni qayta yuborish» bilan bir xil oraliq va limit */
+async function reissueCode(flow: BotFlow, tg: TelegramIds): Promise<BindResult> {
+  if (flow.telegramUserId !== tg.userId) return { kind: "invalid" };
+  if (flow.codesSent >= AUTH.maxCodesPerFlow) return { kind: "codes_exhausted" };
+  if (flow.resendInSeconds > 0) return { kind: "wait", seconds: flow.resendInSeconds };
+  const code = await issueCode(flow.id, "code_sent", tg.userId);
+  return code ? { kind: "code_sent", code } : { kind: "wait", seconds: AUTH.resendCooldownSeconds };
+}
+
+/**
+ * Yangi kod yaratadi. Shartlar UPDATE ichida: bir vaqtdagi ikki so‘rov ikkita kod yubormaydi,
+ * qayta yuborishda oraliq va limit buzilmaydi. Jarayon hali ham kodni so‘ragan akkauntga bog‘langan
+ * bo‘lishi shart: aks holda tekshiruv va UPDATE orasida havolani o‘z akkauntidan bosgan hujumchi
+ * jarayonni o‘ziga o‘tkazib, keyin "qayta yuborish" bilan kodni olardi. Shartlar bajarilmasa — null.
+ */
+async function issueCode(
+  flowId: string,
+  from: "awaiting_contact" | "code_sent",
+  telegramUserId: number,
+): Promise<string | null> {
+  const code = generateOtp();
+  const [updated] = await db
+    .update(authRequests)
+    .set({
+      status: "code_sent",
+      codeHash: hashOtp(flowId, code),
+      codeExpiresAt: nowPlus(AUTH.codeTtlSeconds),
+      codeAttempts: 0,
+      codesSent: sql`${authRequests.codesSent} + 1`,
+      lastCodeSentAt: sql`now()`,
+    })
     .where(
       and(
-        eq(authRequests.startTokenHash, startTokenHash),
+        eq(authRequests.id, flowId),
+        eq(authRequests.status, from),
+        eq(authRequests.telegramUserId, telegramUserId),
         gt(authRequests.expiresAt, sql`now()`),
-        inArray(authRequests.status, ["pending", "awaiting_contact"]),
+        ...(from === "code_sent"
+          ? [
+              lt(authRequests.codesSent, AUTH.maxCodesPerFlow),
+              sql`${authRequests.lastCodeSentAt} <= now() - make_interval(secs => ${AUTH.resendCooldownSeconds})`,
+            ]
+          : []),
       ),
     )
-    .returning({ purpose: authRequests.purpose });
-  if (bound) return { kind: "bound", purpose: bound.purpose };
-
-  const [existing] = await db
-    .select({ status: authRequests.status })
-    .from(authRequests)
-    .where(and(eq(authRequests.startTokenHash, startTokenHash), gt(authRequests.expiresAt, sql`now()`)))
-    .limit(1);
-  return existing?.status === "code_sent" ? { kind: "code_already_sent" } : { kind: "invalid" };
+    .returning({ id: authRequests.id });
+  return updated ? code : null;
 }
 
 export type ContactResult =
@@ -205,20 +277,8 @@ export async function acceptContact(tg: TelegramIds, contactPhone: string): Prom
     if (decision.action === "reject") return { kind: "rejected", message: decision.message };
   }
 
-  const code = generateOtp();
-  const [sent] = await db
-    .update(authRequests)
-    .set({
-      status: "code_sent",
-      codeHash: hashOtp(flow.id, code),
-      codeExpiresAt: nowPlus(AUTH.codeTtlSeconds),
-      codeAttempts: 0,
-      codesSent: sql`${authRequests.codesSent} + 1`,
-      lastCodeSentAt: sql`now()`,
-    })
-    .where(and(eq(authRequests.id, flow.id), eq(authRequests.status, "awaiting_contact")))
-    .returning({ id: authRequests.id });
-  return sent ? { kind: "code_sent", code } : { kind: "no_flow" };
+  const code = await issueCode(flow.id, "awaiting_contact", tg.userId);
+  return code ? { kind: "code_sent", code } : { kind: "no_flow" };
 }
 
 // ───────────── 3. Saytda kodni tasdiqlash ─────────────
@@ -227,33 +287,16 @@ export async function resendCode(flowToken: string): Promise<{ chatId: number; c
   const flow = await loadFlow(flowToken);
   if (!flow || !flow.alive) throw new AuthError("flow_expired");
   if (flow.status === "failed") throw new AuthError("too_many_attempts");
-  if (flow.status !== "code_sent" || flow.telegramChatId === null) throw new AuthError("code_not_sent");
+  if (flow.status !== "code_sent" || flow.telegramChatId === null || flow.telegramUserId === null) {
+    throw new AuthError("code_not_sent");
+  }
   if (flow.codesSent >= AUTH.maxCodesPerFlow) throw new AuthError("too_many_codes");
   if (flow.resendInSeconds > 0) {
     throw new AuthError("resend_cooldown", { retryAfter: flow.resendInSeconds });
   }
 
-  const code = generateOtp();
-  const [updated] = await db
-    .update(authRequests)
-    .set({
-      codeHash: hashOtp(flow.id, code),
-      codeExpiresAt: nowPlus(AUTH.codeTtlSeconds),
-      codeAttempts: 0,
-      codesSent: sql`${authRequests.codesSent} + 1`,
-      lastCodeSentAt: sql`now()`,
-    })
-    .where(
-      and(
-        eq(authRequests.id, flow.id),
-        eq(authRequests.status, "code_sent"),
-        lt(authRequests.codesSent, AUTH.maxCodesPerFlow),
-        // Shartlar takrorlanadi: bir vaqtdagi ikki so‘rov ikkita kod yubormasligi uchun
-        sql`${authRequests.lastCodeSentAt} <= now() - make_interval(secs => ${AUTH.resendCooldownSeconds})`,
-      ),
-    )
-    .returning({ id: authRequests.id });
-  if (!updated) throw new AuthError("resend_cooldown");
+  const code = await issueCode(flow.id, "code_sent", flow.telegramUserId);
+  if (!code) throw new AuthError("resend_cooldown");
   return { chatId: flow.telegramChatId, code };
 }
 
@@ -309,12 +352,11 @@ async function createUserFromFlow(tx: Tx, flow: AuthRequest) {
       firstName: flow.firstName!,
       lastName: flow.lastName!,
       phone: flow.phone,
-      orcid: flow.orcid!,
       telegramUserId: flow.telegramUserId,
     })
     .onConflictDoNothing()
     .returning({ id: users.id });
-  // Kutish paytida shu raqam, ORCID yoki Telegram bilan boshqa akkaunt yaratilgan bo‘lishi mumkin
+  // Kutish paytida shu raqam yoki Telegram bilan boshqa akkaunt yaratilgan bo‘lishi mumkin
   if (!user) throw new AuthError("already_registered");
   return { userId: user.id, notice: null };
 }

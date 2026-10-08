@@ -52,11 +52,9 @@ export function LoginForm() {
       <h1 id="login-title" className="font-serif text-3xl font-semibold tracking-tight">
         Kirish
       </h1>
-      <p className="mt-2 text-muted">
-        Telefon raqamingizni kiriting, tasdiqlash kodi Telegram botimizdan keladi.
-      </p>
+      <p className="mt-2 text-muted">Tasdiqlash kodi Telegram botimizdan keladi.</p>
 
-      <form noValidate onSubmit={onSubmit} className="mt-8 space-y-5">
+      <form noValidate onSubmit={onSubmit} className="mt-7 space-y-5">
         <Field
           label="Telefon raqam"
           name="phone"
@@ -76,7 +74,7 @@ export function LoginForm() {
         </button>
       </form>
 
-      <p className="mt-6 text-sm text-muted">
+      <p className="mt-7 border-t border-line pt-5 text-sm text-muted">
         Hali ro‘yxatdan o‘tmaganmisiz?{" "}
         <Link href="/register" className="link">
           Ro‘yxatdan o‘ting

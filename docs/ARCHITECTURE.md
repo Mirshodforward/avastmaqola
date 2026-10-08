@@ -91,11 +91,12 @@ flowchart TB
 |---|---|---|
 | `auth` | Telegram orqali kod, sessiyalar | ✅ tayyor |
 | `telegram` | Bot: kontakt, kodlar, keyinchalik xabarnomalar | ✅ tayyor |
-| `researchers` | Profil, ORCID OAuth bilan egalikni tasdiqlash | 2-bosqich |
+| `profiles` | Olim profili, rasm, ommaviy sahifa `/oqituvchi/ism-familiya` | ✅ tayyor (ORCID OAuth — 2-bosqich) |
 | `works` | Import konnektorlari, dublikatlarni birlashtirish, sinxronlash | 2-bosqich |
-| `articles` | Yuklash, metadata, ommaviy sahifa, Scholar teglari | 3-bosqich |
+| `articles` | Yuklash, admin tasdig‘i, ommaviy sahifa, Scholar teglari | ✅ tayyor |
+| `ai` | Muharrirdagi AI yordamchi (Claude): maqolani uch tilda to‘ldirish | ✅ tayyor |
 | `distribution` | Kanal adapterlari, holat kuzatish, operator navbati | 4-bosqich |
-| `admin` | Operator paneli, hisobotlar | 5-bosqich |
+| `admin` | Ko‘rib chiqish navbati (✅); operator paneli, hisobotlar | 5-bosqich |
 
 ### Papkalar
 
@@ -108,6 +109,7 @@ src/
     orcid/                # ✅ iD tekshiruvi → OAuth, works
     works/connectors/     # orcid.ts, openalex.ts, crossref.ts, datacite.ts, scopus.ts
     articles/
+    ai/                   # ✅ Claude: ko‘rsatma, tool-use sikli, limit va statistika
     distribution/channels/  # zenodo.ts, osf.ts, manual.ts
     jobs/                 # pg-boss vazifalari
   worker.ts               # alohida jarayon
@@ -133,7 +135,14 @@ interface PublishChannel {
 
 ## 4. Ma’lumotlar modeli
 
-Hozir mavjud: `users`, `auth_requests`, `sessions` ([schema.ts](../src/server/db/schema.ts)). Rejadagi jadvallar:
+Hozir mavjud ([schema.ts](../src/server/db/schema.ts)): `users`, `auth_requests`, `sessions`, `profiles`, `articles`, `article_authors`, `ai_requests`.
+
+- **profiles** — `users` bilan 1:1, birinchi saqlashda yaratiladi. `slug` o‘zgarmaydi (havolalar buzilmasin). Telefon va Telegram ommaviy so‘rovlarda hech qachon tanlanmaydi.
+- **articles** — URL `/maqola/{id}` (raqam: uch tildagi sarlavhadan slug tanlab bo‘lmaydi). Uch til uchun 9 ustun (`title_/abstract_/keywords_` × `uz|ru|en`) va `lang` — PDF tili, h1 va `citation_title` shu tilda. Holatlar: `draft → submitted → published`, `rejected` (tuzatishga qaytgan yoki saytdan olib tashlangan). `published_at` birinchi chop etishda qo‘yiladi va o‘zgarmaydi. DB CHECK: yuborilgan maqolada barcha 9 matn, PDF va huquq tasdig‘i bo‘lishi shart.
+- **article_authors** — mualliflar PDF’dagi tartibda (`citation_author` shu tartibda chiqadi). Faqat o‘qituvchining o‘z qatori `user_id` bilan bog‘langan, hammualliflar oddiy matn.
+- **ai_requests** — AI yordamchiga har bir so‘rov: holat, tokenlar (kesh bilan), taxminiy narx (mikrodollar), davomiylik, xato kodi. Kunlik limit va admin statistikasi shundan. Suhbat matni saqlanmaydi.
+
+Rejadagi jadvallar:
 
 ```mermaid
 erDiagram
@@ -149,7 +158,7 @@ erDiagram
 
 - **works** — yig‘ilgan maqola: `doi` (kichik harfda), `title`, `title_normalized`, `year`, `type`, `venue`, `authors jsonb`, `citation_count`. Unikal kalit: `(user_id, doi)`, faqat DOI bor bo‘lsa.
 - **work_sources** — har bir manbadagi asl yozuv: `source`, `external_id`, `raw jsonb`, `fetched_at`. Unikal kalit: `(source, external_id)`.
-- **articles** — o‘qituvchi yuklagan maqola: `title`, `abstract`, `keywords text[]`, `language`, `license`, `status` (draft → submitted → published), `slug`, `doi`.
+- **articles** — 4-bosqichda `doi` ustuni qo‘shiladi (Zenodo’dan qaytgan DOI).
 - **distributions** — maqolaning har bir kanaldagi holati: `channel`, `status` (queued, in_progress, published, failed, manual_pending, manual_done), `external_id`, `external_url`, `attempts`, `last_error`. Unikal kalit: `(article_id, channel)`.
 
 **Dublikatlarni birlashtirish** (bitta maqola ORCID, OpenAlex va Crossref’dan uch marta keladi):
@@ -168,8 +177,8 @@ sequenceDiagram
   participant S as Sayt
   participant DB as PostgreSQL
   participant B as Telegram bot
-  U->>S: Ism, familiya, telefon, ORCID iD
-  S->>S: Validatsiya va ORCID’da iD borligini tekshirish
+  U->>S: Ism, familiya, telefon
+  S->>S: Validatsiya
   S->>DB: auth_request (pending), brauzerga flow cookie
   S-->>U: Telegram’da ochish (t.me/bot?start=TOKEN)
   U->>B: /start TOKEN
@@ -194,7 +203,17 @@ Kirish (login) xuddi shunday, faqat birinchi qadamda telefon raqamning o‘zi ki
 4. Sahifa natijani ko‘rsatadi; Excel’ga eksport (HEMIS hisoboti uchun).
 5. Avtomatik yangilanish haftasiga bir marta. ORCID shartlari doimiy pollingni taqiqlaydi.
 
-### 5.3 Maqola joylash (3–4-bosqich)
+### 5.3 Maqola joylash va tasdiqlash ✅
+
+1. O‘qituvchi kabinetda "Yangi maqola" → qoralama yaratiladi (`/dashboard/articles/{id}`). Qoralama chala bo‘lishi mumkin, "Saqlash" bilan saqlanadi.
+2. Muharrir: PDF tili, mualliflar (tartib PDF’dagidek), uch tilda sarlavha, annotatsiya va kalit so‘zlar, PDF (≤10 MB, `%PDF-` imzosi tekshiriladi), litsenziya, huquq tasdig‘i. Kamchiliklar ro‘yxati klient va serverda bitta funksiyadan keladi ([article-rules.ts](../src/lib/article-rules.ts)), jumladan ruscha matn kirillda, inglizchasi lotinda bo‘lishi.
+3. "Ko‘rish va yuborish" → sahifa ommaga qanday ochilishi oynada ko‘rsatiladi; o‘qituvchi **tasdiqlasa** → `submitted`, adminlarga Telegram xabari. Shundan keyin o‘qituvchi tahrirlay olmaydi. Maydonlarni AI yordamchi to‘ldirishi mumkin (5.5).
+4. Admin `/admin` navbatida (eng eskisi birinchi) maqolani ommaviy sahifa ko‘rinishida ko‘radi: **Chop etish** yoki izoh bilan **Tuzatishga qaytarish**. Chop etilganini izoh bilan **saytdan olib tashlash** mumkin. Holat compare-and-set bilan o‘zgaradi; qaror admin ko‘rgan yuborishga (`submitted_at`) bog‘langan — o‘qituvchi shu orada qayta yuborgan bo‘lsa, eski oynadan tasdiqlab bo‘lmaydi (409).
+5. Chop etilgach: `/maqola/{id}` ochiladi, keshdagi teglar (`article:{id}`, `articles`, `author:{userId}`) darhol eskiradi, o‘qituvchiga Telegram xabari boradi.
+
+Ommaviy sahifalar (`/maqola/[id]`, `/oqituvchi/[slug]`) `ensureStatic = 'navigation'`: birinchi so‘rov ham (Scholar boti ham) tayyor HTML oladi, yo‘q sahifa haqiqiy 404. `next build` bazaga murojaat qilmaydi: `generateStaticParams` o‘rinbosar qaytaradi, ro‘yxatlar va sitemap `connection()` bilan so‘rov vaqtida.
+
+### 5.4 Tashqi tarqatish (4-bosqich)
 
 ```mermaid
 sequenceDiagram
@@ -206,7 +225,7 @@ sequenceDiagram
   participant O as ORCID
   participant G as Google Scholar
   U->>S: PDF va metadata, «Joylash»
-  S->>S: Ommaviy sahifa (citation_* teglar) darhol ochiladi
+  S->>S: Admin tasdig‘idan keyin ommaviy sahifa (citation_* teglar) ochiladi
   S->>Q: distribute(article, zenodo)
   Q->>Z: deposit, fayl, metadata, publish
   Z-->>Q: DOI 10.5281/zenodo.N
@@ -222,12 +241,23 @@ sequenceDiagram
 - **Google Scholar talablari:** har bir maqola alohida URL’da; annotatsiya login’siz ko‘rinadi; PDF ≤5 MB va matn qatlami bor; teglar `citation_title`, `citation_author` (har bir muallif uchun alohida), `citation_publication_date`, `citation_pdf_url`; bosh sahifadan ko‘pi bilan 10 ta havola orqali yetib borish mumkin.
 - **Qo‘lda kanallar** (ResearchGate, mahalliy jurnallar): `distributions.status = manual_pending`, o‘qituvchi yoki operatorga nusxa olishga tayyor metadata va havola ko‘rsatiladi.
 
+### 5.5 AI yordamchi ✅
+
+Muharrirning o‘ng tomonida (mobilda alohida oynada) chat. O‘qituvchi PDF’ni yuklaydi yoki maqola matnini chatga joylashtiradi (istalgan tilda) — model sarlavha, annotatsiya, kalit so‘zlar, maqola tili va mualliflarni o‘zbek, rus va ingliz tillarida to‘ldiradi. Keyin "Formani shunday o‘zgartirdim" kartasi, "Bekor qilish" va sahifa ko‘rinishi; yuborishni o‘qituvchining o‘zi tasdiqlaydi.
+
+- **Model:** `claude-opus-5-5`, adaptiv thinking, `effort: medium`. Server tomonida `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`): xavfsizlik klassifikatori rad etsa, so‘rov tavsiya etilgan zaxira modelda bajariladi.
+- **Oqim:** `POST /api/articles/{id}/ai` → NDJSON ([lib/ai.ts](../src/lib/ai.ts) `AiEvent`): holat, matn bo‘laklari, yozilayotgan maydon, taklif, yakun. Model formani `propose_changes` vositasi (strict sxema, `eager_input_streaming`) orqali o‘zgartiradi; taklif serverda zod bilan tekshiriladi va forma qoidalariga moslanadi (uzunlik, takrorlar, muallif ismi belgilari, ORCID nazorat raqami). Model taklifni bir necha chaqiruvga bo‘lsa, tool-use sikli (≤3 aylanish) ularni birlashtiradi; har aylanishdan keyin to‘plangan taklif darhol yuboriladi.
+- **Stateless:** suhbat tarixi klientda, har so‘rovda yuboriladi (birinchi juftlik + oxirgi 5 ta). Formaning joriy (saqlanmagan) holati oxirgi xabarda. PDF va birinchi xabar har doim bir xil boshlanmada turadi — keyingi xabarlarda ular keshdan (0,05× narx) o‘qiladi.
+- **Limitlar:** bir o‘qituvchiga kuniga 30 so‘rov (Toshkent vaqti), bir vaqtda bitta javob (advisory lock), PDF ≤150 000 token (taxminan 50 sahifa; kattasi modelga yuborilmaydi — model matnni chatga joylashtirishni so‘raydi), xabar ≤100 000 belgi, so‘rov tanasi ≤1 MB, javob ≤32 000 token.
+- **Narx (o‘lchangan):** to‘liq to‘ldirish ~$0,13 va ~50 s; kichik tuzatish ~$0,04 va ~13 s.
+- **Xavfsizlik:** model faqat o‘qituvchining o‘z formasiga taklif beradi (serverda hech narsa yozmaydi), litsenziya va huquq tasdig‘iga tegmaydi. Maqola matnidagi ko‘rsatmalar ma’lumot sifatida qaraladi. Matn va PDF tahlil uchun Anthropic’ga yuboriladi — bu panelda yozilgan.
+
 ## 6. Qarorlar va cheklovlar
 
 - **Monolit + worker**, mikroservis emas: kichik jamoa, bitta deploy.
 - **Drizzle ORM**: sxema TypeScript’da, SQL’ga yaqin, kod generatsiyasi yo‘q.
 - **Telegram orqali kod**: SMS-provayder xarajati yo‘q, Telegram O‘zbekistonda keng tarqalgan. Kanal almashtiriladigan qilib yozilgan — kerak bo‘lsa SMS (masalan, Eskiz) qo‘shiladi.
-- **ORCID hozircha qo‘lda kiritiladi**, ya’ni "tasdiqlanmagan" (`users.orcid_verified_at`). Nazorat raqami va iD mavjudligi tekshiriladi, lekin birov boshqa odamning iD’sini yozishi mumkin. 2-bosqichda "Sign in with ORCID" (`/authenticate` — bepul) qo‘shiladi va tarqatish faqat tasdiqlangan iD uchun ochiladi.
+- **ORCID iD profil tahririda qo‘lda kiritiladi** (ro‘yxatdan o‘tishda so‘ralmaydi), ya’ni "tasdiqlanmagan" (`users.orcid_verified_at`). Nazorat raqami va iD mavjudligi tekshiriladi, lekin birov boshqa odamning iD’sini yozishi mumkin. 2-bosqichda "Sign in with ORCID" (`/authenticate` — bepul) qo‘shiladi va tarqatish faqat tasdiqlangan iD uchun ochiladi.
 - **Mualliflik huquqi:** jurnalda allaqachon chop etilgan maqolani Zenodo’ga qayta yuklash nashriyot siyosatiga bog‘liq. Yuklashda o‘qituvchi huquqini tasdiqlaydi. Chop etilgan maqola uchun "faqat annotatsiya + jurnal DOI havolasi" rejimi **faqat bizning saytda** bo‘ladi, chunki Zenodo faqat annotatsiyadan iborat yozuvni qabul qilmaydi.
 - **Zenodo qoidalari** (2026-oktyabrda tekshirilgan):
   - **Javobgarlik:** yuklovchi o‘z kontenti uchun to‘liq javobgar.
@@ -242,18 +272,37 @@ sequenceDiagram
 
 - **Kod:** 6 xonali, 2 daqiqa amal qiladi. Bazada server kaliti bilan HMAC-SHA256 ko‘rinishida saqlanadi — oddiy xesh 10⁶ variant uchun befoyda bo‘lardi. Bitta kodga 5 urinish, bitta oqimga 3 ta kod, qayta yuborish oralig‘i 30 soniya.
 - **Telegram:** faqat o‘z kontakti qabul qilinadi (`contact.user_id === from.id`) va raqami solishtiriladi. Webhook `X-Telegram-Bot-Api-Secret-Token` sarlavhasi bilan timing-safe tekshiriladi.
+- **Tanish akkaunt:** kirishda «Kodni olish» havolasini ro‘yxatdan o‘tishda bog‘langan Telegram akkaunt bossa, kontakt so‘ralmasdan kod darhol yuboriladi; qayta bosish — 30 soniya oraliq va 3 ta kod limiti bilan yangi kod. Havolasiz `/start` kod bermaydi (aks holda firibgar o‘zi boshlagan kirish kodini "botda Start bosing" deb so‘rab olardi). Kod faqat jarayon hali ham so‘ragan akkauntga bog‘langan bo‘lsa chiqariladi — shart atomik UPDATE ichida.
 - **Tokenlar:** brauzerda flow token (httpOnly cookie, faqat `/api/auth` uchun), Telegram havolasida undan HMAC orqali hosil qilingan start token. Bazada ikkalasi ham faqat sha256 xesh ko‘rinishida.
-- **Sessiya:** httpOnly, SameSite=Lax, production’da Secure, 30 kun. Bazada xesh saqlanadi, shuning uchun sessiyani o‘chirib bekor qilish mumkin.
+- **Sessiya:** access token `{sessionId}.{muddat}.{HMAC}` (15 daqiqa) + refresh token `{sessionId}.{tasodifiy}.{HMAC}` (bazada faqat xeshi). Kirishdan 7 kun o‘tgach qayta kirish so‘raladi (faollik uzaytirmaydi).
+  - Yangilash `src/proxy.ts`da, faqat sessiya kerak bo‘lgan yo‘llarda (`/dashboard`, `/admin`, `/api`, `/login`, `/register`): ommaviy keshlanadigan sahifalarga token yozilmaydi; token yozilgan javob `no-store`.
+  - Har yangilashda refresh token almashadi; keyingisi oldingisidan HMAC bilan aniqlanadi — 60 soniya ichida oldingi token kelsa (bir nechta tab, yo‘qolgan javob) aynan joriy token qayta beriladi. Shu sessiyaning boshqa har qanday eskirgan tokeni kelsa — o‘g‘irlik: sessiya o‘chiriladi.
+  - Foydalanuvchi o‘qilganda sessiya qatori har safar tekshiriladi: chiqish darhol ishlaydi. Production’da cookie nomlari `__Host-` prefiksli (boshqa subdomen almashtira olmaydi). httpOnly, SameSite=Lax, Secure.
 - **Limitlar:** telefon raqamga soatiga 5 ta, IP’ga 30 ta oqim. Qo‘shimcha CSRF himoyasi — Origin tekshiruvi.
 - **Ataylab qoldirilgan:** login sahifasi raqam ro‘yxatdan o‘tgan-o‘tmaganini aytadi (qulaylik uchun).
-- **Ma’lum cheklov:** limit faqat yaratilgan oqimlarni sanaydi. ORCID tekshiruvidan o‘tmagan yoki band raqamli urinishlar hisobga olinmaydi, shuning uchun kimdir server orqali ORCID kvotasini (IP’ga 25 000/kun) sarflab yuborishi mumkin. Production’dan oldin barcha urinishlarni IP bo‘yicha sanaydigan umumiy limit kerak (alohida jadval yoki reverse-proxy darajasida).
+- **Ma’lum cheklov:** limit faqat yaratilgan oqimlarni sanaydi, band raqam bilan qilingan urinishlar hisobga olinmaydi. Production’dan oldin barcha urinishlarni IP bo‘yicha sanaydigan umumiy limit kerak (alohida jadval yoki reverse-proxy darajasida).
 - **Ochiq qaror:** login paytida Telegram akkaunt boshqacha bo‘lsa (raqam qayta sotilgan bo‘lishi mumkin) — [telegram-policy.ts](../src/server/auth/telegram-policy.ts).
+- **Fayllar:** `public/` da emas, `STORAGE_DIR` da; faqat ruxsatni tekshiradigan route’lar orqali beriladi. Tasdiqlanmagan maqola PDF’i faqat muallif va adminga (`private, no-store`), boshqalarga 404 (borligi ham oshkor qilinmaydi). Fayl nomi `^[\w.-]+$` (yo‘l kesib o‘tish yo‘q). PDF kengaytma bo‘yicha emas, `%PDF-` imzosi bo‘yicha tekshiriladi; rasm sharp bilan qayta kodlanadi (EXIF/GPS o‘chadi).
+- **So‘rov hajmi:** JSON ≤64 KB, yuklashlar ≤10 MB; `Content-Length`’siz (chunked) tana rad etiladi — aks holda `request.json()`/`formData()` cheksiz tanani xotiraga yig‘ardi.
+- **Ommaviy profil moderatsiyasiz ochiladi**, shuning uchun foydalanuvchi kiritgan tashqi havolalar `rel="ugc nofollow"`, Google Scholar havolasi faqat Google domenlaridan. Maqola matnidan bidi (yo‘nalish almashtiruvchi) va ko‘rinmas belgilar olib tashlanadi.
+- **Navbatni to‘ldirib tashlash:** bitta akkauntda chop etilmagan maqolalar (qoralama, navbatdagi, tuzatishdagi) ko‘pi bilan 10 ta; parallel so‘rovlar advisory lock bilan navbatma-navbat sanaladi.
+- **Maxfiylik:** hech qachon yuborilmagan qoralamani (va PDF’ini) faqat muallif ko‘radi, admin ham emas. Profil yopilsa, rasm havolasi ham 404 bo‘ladi (egasidan tashqari). Tasdiqlanmagan ORCID iD JSON-LD’ga chiqmaydi.
+- **Poyga holatlari:** yuborishda maqola qatori qulflanadi (`FOR UPDATE`) — tekshirilgan nusxa aynan yuborilgani bo‘ladi. O‘zgarishdan keyin muallifning ommaviy sahifalari darhol qayta yaratiladi ([warm.ts](../src/server/warm.ts)): kesh teglari xotirada, server qayta ishga tushsa eski nusxa qaytib chiqmasin.
+
+## 7.1 Deploy talablari
+
+- **`APP_URL`** — saytning tashqi manzili, build va server uchun majburiy (bo‘lmasa build to‘xtaydi). `robots.txt` build paytida statik yoziladi, canonical va `citation_pdf_url` ham shundan.
+- **`STORAGE_DIR`** — doimiy (deploy’da o‘chmaydigan) absolyut papka: profil rasmlari va PDF’lar.
+- **Bitta server jarayoni.** Kesh teglari jarayon xotirasida, ISR sahifalar va fayllar lokal diskda. Bir nechta nusxa kerak bo‘lsa — umumiy `cacheHandler` va obyekt ombori (S3) kerak.
+- **nginx:** `client_max_body_size 11m;` va `proxy_set_header X-Real-IP $remote_addr;` (IP bo‘yicha limitlar shu sarlavhaga tayanadi — `X-Forwarded-For`ning birinchi qiymatini mijoz soxtalashtira oladi). Mavjud bo‘lmagan `/maqola/N` va `/oqituvchi/x` manzillari ham 404 sifatida diskka keshlanadi — botlar uchun `limit_req` qo‘ying.
+- **Administrator:** foydalanuvchi saytda ro‘yxatdan o‘tgach, `npm run admin -- +998901234567`. Yangi maqolalar haqida Telegram xabari adminlarga boradi.
+- **AI yordamchi:** `ANTHROPIC_API_KEY` (lokal `.env.local`da `CLAUDE-API-KEY` nomi ham o‘qiladi; systemd/shell defisli nomni qabul qilmaydi). Kalit bo‘lmasa panel ko‘rinmaydi. Javob oqim bo‘lib keladi: server `X-Accel-Buffering: no` qo‘yadi, nginx’da `/api/articles/` uchun `proxy_read_timeout 300s;` (model uzoq o‘ylaganda server har 15 soniyada bo‘sh qator yuboradi).
 
 ## 8. Bosqichlar
 
 1. ✅ Telegram orqali kirish, bosh sahifa, kabinet karkasi.
 2. ORCID OAuth tasdiqlash; "Mening maqolalarim" (ORCID + OpenAlex + Crossref + DataCite), dublikatlarni birlashtirish, pg-boss worker, Excel eksport.
-3. Maqola yuklash; ommaviy sahifa `/maqola/[slug]`, `citation_*` teglar, `sitemap.xml`, `robots.txt`; fayl ombori.
+3. ✅ Olim profili va rasmi; maqola yuklash va admin tasdig‘i; ommaviy sahifa `/maqola/[id]`, `/maqolalar`, `citation_*` teglar, JSON-LD, `sitemap.xml`, `robots.txt`; fayl ombori.
 4. Zenodo (avval sandbox), DOI’ni sahifaga yozish, DataCite auto-update yo‘riqnomasi, Telegram xabarnomalari; OSF Preprints.
 5. Operator paneli: qo‘lda kanallar, holatlar, hisobotlar; universitet obunasi bo‘lsa Scopus/WoS.
 

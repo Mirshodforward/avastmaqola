@@ -1,5 +1,5 @@
 import "server-only";
-import { acceptContact, bindTelegram, type TelegramIds } from "../auth/flow";
+import { acceptContact, bindTelegram, type BindResult, type TelegramIds } from "../auth/flow";
 import { MESSAGES, askContact, sendCode, sendText } from "./messages";
 import type { TgContact, TgUpdate } from "./types";
 
@@ -16,14 +16,21 @@ export async function handleUpdate(update: TgUpdate): Promise<void> {
 
 async function onStart(text: string, tg: TelegramIds) {
   const payload = text.split(/\s+/)[1];
+  // Kod faqat saytdagi «Kodni olish» havolasi orqali (payload bilan): havolasiz /start — faqat salomlashuv
   if (!payload) return sendText(tg.chatId, MESSAGES.welcome);
+  return reply(await bindTelegram(payload, tg), tg);
+}
 
-  const result = await bindTelegram(payload, tg);
+function reply(result: BindResult, tg: TelegramIds) {
   switch (result.kind) {
+    case "code_sent":
+      return sendCode(tg.chatId, result.code);
     case "bound":
       return askContact(tg.chatId, result.purpose);
-    case "code_already_sent":
-      return sendText(tg.chatId, MESSAGES.codeAlreadySent);
+    case "wait":
+      return sendText(tg.chatId, MESSAGES.codeWait(result.seconds));
+    case "codes_exhausted":
+      return sendText(tg.chatId, MESSAGES.codesExhausted, { removeKeyboard: true });
     case "invalid":
       return sendText(tg.chatId, MESSAGES.linkInvalid);
   }

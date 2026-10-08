@@ -37,6 +37,12 @@ yarn-error.log*
 # lokal PostgreSQL ma'lumotlari (npm run db:start)
 /.pgdata/
 
+# foydalanuvchi yuklagan fayllar (profil rasmlari, maqola PDF'lari)
+/storage/
+
+# Playwright MCP brauzer tekshiruvlari chiqishi (skrinshot, snapshot, log)
+/.playwright-mcp/
+
 # vercel
 .vercel
 

@@ -7,6 +7,7 @@
   --ink: #15213b;
   --muted: #5a6478;
   --line: #d6dde8;
+  --input-border: #7d889b; /* WCAG 1.4.11: oq va mist fonda kamida 3:1 */
   --lapis: #1f3c8f;
   --lapis-deep: #172d6c;
   --on-lapis: #ffffff;
@@ -14,14 +15,8 @@
   --tile-soft: #e3f3f2;
   --danger: #b42318;
   --danger-soft: #fdecea;
-  --telegram: #229ed9;
+  --telegram: #1a73a8; /* brend rangi #229ed9 oq matn bilan 3:1 — AA uchun to‘qroq (5.2:1) */
   --orcid: #a6ce39;
-  /* Qog‘oz varag‘i — mavzudan qat’i nazar doim yorug‘ */
-  --sheet: #ffffff;
-  --sheet-ink: #15213b;
-  --sheet-muted: #5a6478;
-  --sheet-line: #d6dde8;
-  --sheet-accent: #0f7b83;
   color-scheme: light;
 }
 
@@ -32,6 +27,7 @@
     --ink: #e6ebf5;
     --muted: #9aa6bd;
     --line: #2a3650;
+    --input-border: #5d6b87;
     --lapis: #8fb0ff;
     --lapis-deep: #b8ccff;
     --on-lapis: #0d1424;
@@ -58,13 +54,51 @@
   --color-danger-soft: var(--danger-soft);
   --color-telegram: var(--telegram);
   --color-orcid: var(--orcid);
-  --color-sheet: var(--sheet);
-  --color-sheet-ink: var(--sheet-ink);
-  --color-sheet-muted: var(--sheet-muted);
-  --color-sheet-line: var(--sheet-line);
-  --color-sheet-accent: var(--sheet-accent);
   --font-serif: var(--font-literata), Georgia, serif;
   --font-sans: var(--font-onest), system-ui, sans-serif;
+}
+
+/* Kabinet formalarining pastki sticky paneli fokuslangan maydonni yopib qo‘ymasin (WCAG 2.4.11) */
+html {
+  scroll-padding-bottom: 8rem;
+}
+
+/* Bosh sahifa belgisi: ufqdan ko‘tarilish, keyin sekin suzish. Faqat transform/opacity/clip-path — sahifa siljimaydi (CLS 0) */
+@keyframes asman-rise {
+  from {
+    opacity: 0;
+    clip-path: inset(100% 0 0 0);
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0);
+    transform: none;
+  }
+}
+@keyframes asman-float {
+  50% {
+    transform: translateY(-10px);
+  }
+}
+@keyframes asman-horizon {
+  from {
+    transform: scaleX(0);
+  }
+}
+.asman-rise {
+  animation:
+    asman-rise 1.4s cubic-bezier(0.2, 0.7, 0.2, 1) both,
+    asman-float 7s ease-in-out 1.6s infinite;
+}
+.asman-horizon {
+  animation: asman-horizon 1s cubic-bezier(0.2, 0.7, 0.2, 1) 0.3s both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .asman-rise,
+  .asman-horizon {
+    animation: none;
+  }
 }
 
 body {
@@ -100,7 +134,8 @@ body {
       border-color 0.15s,
       color 0.15s;
   }
-  .btn:disabled {
+  .btn:disabled,
+  .btn[aria-disabled="true"] {
     cursor: not-allowed;
     opacity: 0.55;
   }
@@ -134,12 +169,12 @@ body {
     color: #ffffff;
   }
   .btn-telegram:hover {
-    background: #1b8cc2;
+    background: #155f8b;
   }
 
   .input {
     width: 100%;
-    border: 1px solid var(--line);
+    border: 1px solid var(--input-border);
     border-radius: 0.5rem;
     background: var(--paper);
     color: var(--ink);
@@ -166,27 +201,5 @@ body {
     text-decoration: underline;
     text-decoration-thickness: 1px;
     text-underline-offset: 3px;
-  }
-}
-
-/* Joylash varaqasi qatorlari ketma-ket paydo bo‘ladi — sahifadagi yagona animatsiya */
-@keyframes slip-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-.slip-row {
-  opacity: 0;
-  animation: slip-in 0.5s ease-out forwards;
-}
-@media (prefers-reduced-motion: reduce) {
-  .slip-row {
-    opacity: 1;
-    animation: none;
   }
 }

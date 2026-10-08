@@ -1,10 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { getJson, postJson } from "@/lib/api-client";
 import type { FlowStatus, FlowView } from "@/lib/auth-types";
-import { OrcidIcon } from "../orcid-icon";
-import { BotQr } from "./bot-qr";
 
 const WAITING: FlowStatus[] = ["pending", "awaiting_contact"];
 
@@ -13,6 +11,7 @@ export function isResumable(flow: FlowView) {
   return [...WAITING, "code_sent"].includes(flow.status);
 }
 
+// Ekranda ko‘rinmaydi — holat o‘zgarishini ekran o‘quvchilar uchun e’lon qiladi
 const STATUS_TEXT: Record<FlowStatus, string> = {
   pending: "Bot ochilishini kutyapmiz…",
   awaiting_contact: "Bot ochildi. Endi Telegram’da kontaktingizni yuboring.",
@@ -24,11 +23,10 @@ const STATUS_TEXT: Record<FlowStatus, string> = {
 
 type Props = {
   initialFlow: FlowView;
-  orcidName?: string | null;
   onRestart: () => void;
 };
 
-export function TelegramVerify({ initialFlow, orcidName, onRestart }: Props) {
+export function TelegramVerify({ initialFlow, onRestart }: Props) {
   const [flow, setFlow] = useState(initialFlow);
   // Qolgan vaqtni server aytadi, brauzer esa har soniyada kamaytirib boradi
   const [secondsLeft, setSecondsLeft] = useState(initialFlow.codeSecondsLeft);
@@ -36,6 +34,7 @@ export function TelegramVerify({ initialFlow, orcidName, onRestart }: Props) {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [focused, setFocused] = useState(false);
   const codeInput = useRef<HTMLInputElement>(null);
 
   const apply = useCallback((next: FlowView) => {
@@ -71,7 +70,6 @@ export function TelegramVerify({ initialFlow, orcidName, onRestart }: Props) {
 
   useEffect(() => {
     if (flow.status !== "code_sent") return;
-    codeInput.current?.focus();
     const id = setInterval(() => {
       setSecondsLeft((s) => Math.max(0, s - 1));
       setResendIn((s) => Math.max(0, s - 1));
@@ -81,7 +79,15 @@ export function TelegramVerify({ initialFlow, orcidName, onRestart }: Props) {
 
   const codeSent = flow.status === "code_sent";
   const codeExpired = codeSent && secondsLeft === 0;
+  const canResend = codeSent && flow.codesLeft > 0 && resendIn === 0;
   const finished = flow.status === "failed" || flow.status === "expired";
+  const inputReady = codeSent && !codeExpired && !busy;
+
+  // Maydon faollashganda fokusni unga beramiz: kod kelganda, xato koddan va qayta yuborishdan keyin.
+  // disabled input fokus olmaydi, shuning uchun buni React DOM'ni yangilagandan keyin qilamiz
+  useEffect(() => {
+    if (inputReady) codeInput.current?.focus();
+  }, [inputReady]);
 
   async function submit(value: string) {
     if (busy || value.length !== 6) return;
@@ -98,18 +104,18 @@ export function TelegramVerify({ initialFlow, orcidName, onRestart }: Props) {
     setCode("");
     const { code: errorCode, message, attemptsLeft } = res.error;
     setError(errorCode === "wrong_code" && attemptsLeft ? `${message} Yana ${attemptsLeft} ta urinish qoldi.` : message);
-    if (errorCode === "wrong_code") codeInput.current?.focus();
-    else void refresh();
+    if (errorCode !== "wrong_code") void refresh();
   }
 
   async function resend() {
     setBusy(true);
     setError(null);
     const res = await postJson("/api/auth/resend");
-    setBusy(false);
     setCode("");
     if (!res.ok) setError(res.error.message);
+    // busy yangi holat kelgandan keyin o‘chadi — aks holda tugma eski resendIn=0 bilan bir lahza qaytib chiqadi
     await refresh();
+    setBusy(false);
   }
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -117,137 +123,121 @@ export function TelegramVerify({ initialFlow, orcidName, onRestart }: Props) {
     void submit(code);
   }
 
+  // Yagona doimiy live-hudud: yangi qo‘shilgan aria-live elementni ekran o‘quvchilar ko‘pincha o‘qimaydi
+  const announcement = finished ? "" : busy ? "Tekshirilmoqda…" : codeExpired ? "Kod eskirdi." : STATUS_TEXT[flow.status];
+
   return (
     <section aria-labelledby="verify-title">
-      <h1 id="verify-title" className="font-serif text-3xl font-semibold tracking-tight">
+      {/* Ko‘rinishda faqat bot havolasi, qisqa izoh va kod maydoni; sarlavha ekran o‘quvchilar uchun */}
+      <h1 id="verify-title" className="sr-only">
         Raqamni tasdiqlang
       </h1>
-      <p className="mt-2 text-muted">
-        Kod <span className="whitespace-nowrap text-ink">{flow.phoneMasked}</span> raqami ulangan
-        Telegram akkauntga keladi.
+      <p className="sr-only" aria-live="polite">
+        {announcement}
       </p>
 
-      {orcidName && (
-        <p className="mt-5 flex items-center gap-2 rounded-lg bg-tile-soft px-3 py-2.5 text-sm">
-          <OrcidIcon />
-          <span>
-            ORCID profili topildi: <strong className="font-medium">{orcidName}</strong>
-          </span>
-        </p>
-      )}
-
-      <ol className="mt-8 space-y-7">
-        <Step n={1} title="Botni oching" done={flow.status !== "pending"}>
-          <div className="mt-3 flex flex-wrap items-center gap-5">
-            <a href={flow.botUrl} target="_blank" rel="noopener noreferrer" className="btn btn-telegram">
-              Telegram’da ochish
-            </a>
-            {/* Kompyuterda: Telegram ko‘pincha telefonda bo‘ladi — QR orqali botni telefonda ochadi */}
-            {flow.status === "pending" && (
-              <div className="hidden items-center gap-3 sm:flex">
-                <BotQr url={flow.botUrl} />
-                <p className="max-w-36 text-xs leading-relaxed text-muted">
-                  Yoki telefon kamerasi bilan QR kodni skanerlang
-                </p>
-              </div>
-            )}
-          </div>
-        </Step>
-
-        <Step n={2} title="Botda «📱 Kontaktni yuborish» tugmasini bosing" done={codeSent}>
-          <p className="mt-1 text-sm text-muted" aria-live="polite">
-            {STATUS_TEXT[flow.status]}
+      {finished ? (
+        <>
+          <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2.5 text-sm text-danger">
+            {error ?? STATUS_TEXT[flow.status]}
           </p>
-        </Step>
-
-        <Step n={3} title="Telegram’ga kelgan 6 xonali kodni kiriting" done={false}>
-          <form onSubmit={onSubmit} className="mt-3">
-            <input
-              ref={codeInput}
-              value={code}
-              onChange={(e) => {
-                const value = e.target.value.replace(/\D/g, "").slice(0, 6);
-                setCode(value);
-                if (value.length === 6) void submit(value);
-              }}
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              aria-label="6 xonali kod"
-              placeholder="000000"
-              disabled={!codeSent || codeExpired || busy}
-              className="input max-w-56 text-center font-serif text-2xl tracking-[0.4em] tabular-nums"
-            />
-            {codeSent && (
-              <p className="mt-2 text-sm text-muted" aria-live="polite">
-                {codeExpired ? "Kod eskirdi. Yangisini oling." : `Kod yana ${formatSeconds(secondsLeft)} amal qiladi.`}
-              </p>
-            )}
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={!codeSent || codeExpired || busy || code.length !== 6}
-              >
-                {busy ? "Tekshirilmoqda…" : "Tasdiqlash"}
-              </button>
-              {codeSent && flow.codesLeft > 0 && (
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={resend}
-                  disabled={busy || resendIn > 0}
-                >
-                  Kodni qayta yuborish{resendIn > 0 ? ` (${formatSeconds(resendIn)})` : ""}
-                </button>
-              )}
-            </div>
-          </form>
-        </Step>
-      </ol>
-
-      {error && (
-        <p role="alert" className="mt-6 rounded-lg bg-danger-soft px-3 py-2.5 text-sm text-danger">
-          {error}
-        </p>
-      )}
-
-      <div className="mt-8 border-t border-line pt-5">
-        {finished ? (
-          <button type="button" className="btn btn-primary" onClick={onRestart}>
+          <button type="button" className="btn btn-primary mt-5" onClick={onRestart}>
             Qaytadan boshlash
           </button>
-        ) : (
-          <button type="button" className="link text-sm" onClick={onRestart}>
-            Raqamni o‘zgartirish
-          </button>
-        )}
-      </div>
+        </>
+      ) : (
+        <>
+          {/* 6 ta raqam terilishi bilan o‘zi yuboriladi, Enter ham ishlaydi — alohida tugma kerak emas */}
+          <form onSubmit={onSubmit}>
+            <label htmlFor="otp-code" className="block text-sm font-medium">
+              Tasdiqlash kodi
+            </label>
+            {/* Ko‘rinishda 6 ta katak, ichida bitta haqiqiy input: avto-to‘ldirish, paste va ekran o‘quvchi buzilmaydi */}
+            <div className="relative mt-2">
+              <div aria-hidden="true" className="grid grid-cols-6 gap-2 sm:gap-3">
+                {Array.from({ length: 6 }, (_, i) => {
+                  const active = focused && inputReady && i === Math.min(code.length, 5);
+                  const tone = error
+                    ? "border-danger"
+                    : active
+                      ? "border-tile ring-[3px] ring-tile/25"
+                      : code[i]
+                        ? "border-ink/50"
+                        : "border-[var(--input-border)]";
+                  return (
+                    <div
+                      key={i}
+                      className={`grid h-14 place-items-center rounded-xl border bg-paper font-serif text-2xl font-semibold tabular-nums transition-[border-color,box-shadow] ${tone} ${inputReady ? "" : "opacity-55"}`}
+                    >
+                      {code[i] ?? (active ? <span className="h-7 w-0.5 animate-pulse rounded bg-ink motion-reduce:animate-none" /> : "")}
+                    </div>
+                  );
+                })}
+              </div>
+              <input
+                id="otp-code"
+                ref={codeInput}
+                value={code}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, "").slice(0, 6);
+                  setCode(value);
+                  setError(null);
+                  if (value.length === 6) void submit(value);
+                }}
+                onFocus={() => setFocused(true)}
+                onBlur={() => setFocused(false)}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                aria-describedby="otp-status"
+                aria-invalid={error ? true : undefined}
+                disabled={!inputReady}
+                className="absolute inset-0 h-full w-full cursor-text text-base opacity-0 disabled:cursor-not-allowed"
+              />
+            </div>
+            <p id="otp-status" className="mt-3 flex min-h-5 items-center gap-2 text-sm text-muted">
+              {waiting && (
+                <>
+                  <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-tile motion-reduce:animate-none" />
+                  Kod kelishini kutyapmiz…
+                </>
+              )}
+              {codeSent && (busy ? "Tekshirilmoqda…" : codeExpired ? "Kod eskirdi. " : canResend ? "Kod kelmadimi? " : `Kod ${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")} amal qiladi`)}
+              {codeSent && !busy && canResend && (
+                <button type="button" className="link" onClick={resend}>
+                  Kodni qayta yuborish
+                </button>
+              )}
+            </p>
+          </form>
+
+          {/* Yozuv bot xabarlaridagi bilan bir xil (server/telegram/messages.ts). Kod kelgach asosiy e’tibor kod maydonida */}
+          <a
+            href={flow.botUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`btn btn-lg mt-5 w-full ${codeSent ? "btn-secondary" : "btn-telegram"}`}
+          >
+            <svg viewBox="0 0 24 24" className="size-5" fill="currentColor" aria-hidden="true">
+              <path d="M21.94 4.3 18.7 19.42c-.24 1.06-.88 1.32-1.77.82l-4.9-3.6-2.36 2.27c-.26.26-.48.48-.98.48l.35-4.98 9.06-8.18c.39-.35-.09-.55-.61-.2L6.3 13.07l-4.82-1.5c-1.05-.33-1.07-1.05.22-1.55L20.56 2.7c.88-.32 1.65.2 1.38 1.6Z" />
+            </svg>
+            Kodni olish
+          </a>
+
+          {error && (
+            <p role="alert" className="mt-5 rounded-lg bg-danger-soft px-3 py-2.5 text-sm text-danger">
+              {error}
+            </p>
+          )}
+
+          <p className="mt-7 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-5 text-sm">
+            <span className="whitespace-nowrap text-muted">{flow.phoneMasked}</span>
+            <button type="button" className="link" onClick={onRestart}>
+              Raqamni o‘zgartirish
+            </button>
+          </p>
+        </>
+      )}
     </section>
   );
-}
-
-function Step({ n, title, done, children }: { n: number; title: string; done: boolean; children: ReactNode }) {
-  return (
-    <li className="flex gap-4">
-      <span
-        className={`grid size-8 shrink-0 place-items-center rounded-full border font-serif text-sm ${
-          done ? "border-tile bg-tile text-paper" : "border-line text-muted"
-        }`}
-        aria-hidden="true"
-      >
-        {done ? "✓" : n}
-      </span>
-      <div className="min-w-0 flex-1 pt-1">
-        <p className="font-medium">
-          {title}
-          {done && <span className="sr-only"> (bajarildi)</span>}
-        </p>
-        {children}
-      </div>
-    </li>
-  );
-}
-
-function formatSeconds(total: number) {
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 }
