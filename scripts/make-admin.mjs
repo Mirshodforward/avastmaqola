@@ -15,9 +15,15 @@ if (!phone || !/^\+998\d{9}$/.test(phone)) {
 
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();
-const { rowCount } = await db.query("update users set role = $2 where phone = $1", [phone, role]);
+// Administratorni moderatorga tushirib qo‘ymaslik uchun (adashib uning raqami yozilsa, /admin yopilib qolardi)
+const { rowCount } = await db.query("update users set role = $2 where phone = $1 and (role <> 'admin' or $2 = 'admin')", [phone, role]);
+const [user] = rowCount ? [] : (await db.query("select role from users where phone = $1", [phone])).rows;
 await db.end();
 
+if (user?.role === "admin") {
+  console.error(`${phone} — administrator, moderator qilinmadi.`);
+  process.exit(1);
+}
 if (!rowCount) {
   console.error(`${phone} ro‘yxatdan o‘tmagan. Avval saytda ro‘yxatdan o‘ting.`);
   process.exit(1);

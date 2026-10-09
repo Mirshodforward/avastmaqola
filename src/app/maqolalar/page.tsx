@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { ArticleList, type ArticleListEntry } from "@/components/article/article-list";
 import { PublicFooter } from "@/components/public-footer";
 import { PublicHeader } from "@/components/public-header";
+import { PUBLIC_WIDTH } from "@/components/public-width";
 import { UNIVERSITY_NAME } from "@/lib/brand";
 import { yearOf } from "@/lib/format";
 import { listPublishedArticles } from "@/server/articles/public";
@@ -19,7 +20,7 @@ export default function ArticlesPage() {
   return (
     <>
       <PublicHeader />
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:px-6">
+      <main className={`flex-1 py-10 ${PUBLIC_WIDTH}`}>
         <h1 className="font-serif text-3xl font-semibold tracking-tight sm:text-4xl">Maqolalar</h1>
         <p className="mt-2 text-muted">
           {UNIVERSITY_NAME} o‘qituvchilarining universitet tasdiqlagan ilmiy maqolalari. Yangilari birinchi.

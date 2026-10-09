@@ -9,7 +9,7 @@ import { IssueFields, type IssueValues } from "./issue-fields";
 
 /**
  * Yuborishdan oldingi oxirgi qadam: o‘qituvchi maqola sahifasi aynan qanday ochilishini ko‘radi
- * va tasdiqlaydi — shundan keyingina maqola administratorga yuboriladi.
+ * va tasdiqlaydi — shundan keyingina maqola ko‘rib chiqishga (moderator yoki admin) yuboriladi.
  */
 export function ArticlePreview({
   open,
@@ -61,7 +61,7 @@ export function ArticlePreview({
               <h2 id="preview-title" className="font-serif text-lg font-semibold">
                 Maqola sahifasi shunday ko‘rinadi
               </h2>
-              <p className="text-sm text-muted">Administrator tasdiqlagach, sahifa shu ko‘rinishda ommaga ochiladi.</p>
+              <p className="text-sm text-muted">Universitet tasdiqlagach, sahifa shu ko‘rinishda ommaga ochiladi.</p>
             </div>
             <button type="button" className="btn btn-ghost px-2.5" onClick={onClose} aria-label="Ko‘rinishni yopish">
               <span aria-hidden="true">✕</span>
@@ -96,7 +96,7 @@ export function ArticlePreview({
               <p className="text-sm text-muted">AI hali javob yozmoqda — tugashini kuting.</p>
             ) : (
               <p className="text-sm text-tile">
-                Yuborish bilan maqolani ochiq joylashga huquqingiz borligini tasdiqlaysiz. Maqola administratorga ko‘rib chiqishga ketadi.
+                Yuborish bilan maqolani ochiq joylashga huquqingiz borligini tasdiqlaysiz. Maqola universitetga ko‘rib chiqishga ketadi.
               </p>
             )}
             <div className="mt-3 flex flex-wrap items-center gap-3">

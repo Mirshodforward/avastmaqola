@@ -37,6 +37,11 @@ const uz = {
       { title: "Muallif profili", text: "Rasm, lavozim, ORCID iD va barcha maqolalar bitta sahifada." },
     ],
   },
+  articles: {
+    // home/latest-articles.tsx
+    title: "So‘nggi maqolalar",
+    all: "Barcha maqolalar",
+  },
   news: {
     // home/latest-news.tsx
     title: "Yangiliklar",
@@ -84,6 +89,7 @@ export const homeText: Record<Lang, typeof uz> = {
         { title: "Профиль автора", text: "Фото, должность, ORCID iD и все статьи на одной странице." },
       ],
     },
+    articles: { title: "Последние статьи", all: "Все статьи" },
     news: { title: "Новости", all: "Все новости" },
     authors: { title: "Авторы", all: "Все авторы", directions: "Научные направления" },
     cta: { title: "Разместите свою статью на портале" },
@@ -116,6 +122,7 @@ export const homeText: Record<Lang, typeof uz> = {
         { title: "Author profile", text: "Photo, position, ORCID iD and all articles on one page." },
       ],
     },
+    articles: { title: "Latest articles", all: "All articles" },
     news: { title: "News", all: "All news" },
     authors: { title: "Authors", all: "All authors", directions: "Research fields" },
     cta: { title: "Post your article on the portal" },

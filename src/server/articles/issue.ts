@@ -1,7 +1,6 @@
 import "server-only";
-import { and, eq, inArray, ne, sql } from "drizzle-orm";
-import type { ArticleStatus } from "@/lib/article-rules";
-import { issueLabel } from "@/lib/issue";
+import { and, eq, ne, sql } from "drizzle-orm";
+import { ISSUE_MAX, issueLabel } from "@/lib/issue";
 import { AuthError } from "../auth/errors";
 import { db } from "../db";
 import { articles } from "../db/schema";
@@ -9,25 +8,25 @@ import { articles } from "../db/schema";
 /** Son va undagi raqam: o‘qituvchi taklif qiladi, moderator yoki admin chop etishda belgilaydi */
 export type IssuePlace = { issueNo: number; issueSeq: number };
 
-/** Sondagi navbatdagi raqam: shu holatdagi maqolalarning eng katta raqamidan keyin */
-async function nextSeq(issueNo: number, statuses: ArticleStatus[]) {
+/**
+ * Sondagi navbatdagi raqam: chop etilganlarning eng kattasidan keyin. Faqat chop etilganlar sanaladi — o‘qituvchi
+ * yozgan katta raqam boshqalarning taklifini buzmasin; 999 dan oshmaydi (aks holda CHECK yangi qoralamani rad etardi)
+ */
+async function nextSeq(issueNo: number) {
   const [row] = await db
-    .select({ seq: sql<number>`coalesce(max(${articles.issueSeq}), 0)::int + 1` })
+    .select({ seq: sql<number>`least(coalesce(max(${articles.issueSeq}), 0) + 1, ${ISSUE_MAX})::int` })
     .from(articles)
-    .where(and(eq(articles.issueNo, issueNo), inArray(articles.status, statuses)));
+    .where(and(eq(articles.issueNo, issueNo), eq(articles.status, "published")));
   return row.seq;
 }
 
-/**
- * Yangi qoralama uchun taklif: joriy son (chop etilganlar ichida eng kattasi) va undagi navbatdagi raqam.
- * Navbatdagilar ham sanaladi — bir vaqtda yozayotgan o‘qituvchilar bir xil raqamni kamroq oladi
- */
+/** Yangi qoralama uchun taklif: joriy son (chop etilganlar ichida eng kattasi) va undagi navbatdagi raqam */
 export async function suggestIssuePlace(): Promise<IssuePlace> {
   const [row] = await db
     .select({ issueNo: sql<number>`coalesce(max(${articles.issueNo}), 1)::int` })
     .from(articles)
     .where(eq(articles.status, "published"));
-  return { issueNo: row.issueNo, issueSeq: await nextSeq(row.issueNo, ["published", "submitted"]) };
+  return { issueNo: row.issueNo, issueSeq: await nextSeq(row.issueNo) };
 }
 
 /** Ko‘rib chiqish paneli uchun: taklif qilingan joyni boshqa chop etilgan maqola egallaganmi va sondagi bo‘sh raqam */
@@ -47,7 +46,7 @@ export async function issuePlaceStatus(id: number, issueNo: number, issueSeq: nu
             ),
           )
           .limit(1);
-  return { takenBy: taken?.id ?? null, nextSeq: await nextSeq(issueNo, ["published"]) };
+  return { takenBy: taken?.id ?? null, nextSeq: await nextSeq(issueNo) };
 }
 
 /** Joy band bo‘lsa (unique index) — ko‘rib chiquvchiga bo‘sh raqam bilan tushunarli xato; boshqa xato o‘zgarmaydi */
@@ -56,6 +55,6 @@ export async function placeTakenError(error: unknown, place: IssuePlace): Promis
   if (pg?.code !== "23505" || pg.constraint !== "articles_issue_slot_uq") return error;
   return new AuthError("validation", {
     fieldErrors: { "place.issueSeq": `${issueLabel(place.issueNo, place.issueSeq)} band.` },
-    nextSeq: await nextSeq(place.issueNo, ["published"]),
+    nextSeq: await nextSeq(place.issueNo),
   });
 }

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArticleView } from "@/components/article/article-view";
 import { PublicFooter } from "@/components/public-footer";
 import { PublicHeader } from "@/components/public-header";
+import { PUBLIC_WIDTH } from "@/components/public-width";
 import { RatingSection } from "@/components/rating/rating-section";
 import { JsonLd } from "@/components/seo/json-ld";
 import { SITE_NAME } from "@/lib/brand";
@@ -69,7 +70,7 @@ export default async function ArticlePage({ params }: Props) {
   return (
     <>
       <PublicHeader />
-      <main className="w-full flex-1 px-4 py-10 sm:px-6">
+      <main className={`flex-1 py-10 ${PUBLIC_WIDTH}`}>
         <ArticleView v={v} absoluteUrl={articleUrl(v.id)} rating={{ avg: ratings.avg, count: ratings.count }} />
         <RatingSection articleId={v.id} ratings={ratings} />
         <JsonLd data={articleJsonLd(v)} />

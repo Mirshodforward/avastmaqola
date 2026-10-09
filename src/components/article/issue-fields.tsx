@@ -40,7 +40,8 @@ export function IssueFields({
       aria-invalid={invalid || undefined}
       aria-describedby={describedBy}
       onChange={(e) => onChange({ ...value, [key]: digits(e.target.value) })}
-      onBlur={() => !value[key] && onChange({ ...value, [key]: last.current[key] })}
+      // Faqat qaytaradigan qiymat bo‘lsa: bekor onChange yonidagi xato va "Bo‘sh: …" tugmasini bosishdan oldin o‘chirib qo‘yardi
+      onBlur={() => !value[key] && last.current[key] && onChange({ ...value, [key]: last.current[key] })}
       className="input w-16 px-2 text-center tabular-nums"
     />
   );

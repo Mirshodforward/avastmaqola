@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PublicFooter } from "@/components/public-footer";
 import { PublicHeader } from "@/components/public-header";
+import { PUBLIC_WIDTH } from "@/components/public-width";
 import { JsonLd } from "@/components/seo/json-ld";
 import { SITE_NAME, UNIVERSITY_NAME } from "@/lib/brand";
 import { formatDate, truncate } from "@/lib/format";
@@ -61,8 +62,8 @@ export default async function NewsItemPage({ params }: Props) {
   return (
     <>
       <PublicHeader />
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:px-6">
-        <article aria-labelledby="news-title">
+      <main className={`flex-1 py-10 ${PUBLIC_WIDTH}`}>
+        <article aria-labelledby="news-title" className="mx-auto max-w-3xl">
           <Link href="/yangiliklar" className="link text-sm">
             ← Yangiliklar
           </Link>

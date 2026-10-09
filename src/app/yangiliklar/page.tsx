@@ -5,6 +5,7 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { PublicFooter } from "@/components/public-footer";
 import { PublicHeader } from "@/components/public-header";
+import { PUBLIC_WIDTH } from "@/components/public-width";
 import { UNIVERSITY_NAME } from "@/lib/brand";
 import { formatDate, truncate } from "@/lib/format";
 import { newsImageUrl } from "@/lib/media";
@@ -20,7 +21,7 @@ export default function NewsPage() {
   return (
     <>
       <PublicHeader />
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:px-6">
+      <main className={`flex-1 py-10 ${PUBLIC_WIDTH}`}>
         <h1 className="font-serif text-3xl font-semibold tracking-tight sm:text-4xl">Yangiliklar</h1>
         <Suspense fallback={<ListSkeleton />}>
           <NewsList />

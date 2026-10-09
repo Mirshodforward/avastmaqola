@@ -2,7 +2,7 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { listPublishedArticles } from "@/server/articles/public";
 import { groupByDirection, listPublicTeachers } from "@/server/profiles/directory";
-import { HOME_WIDTH } from "./home-section";
+import { PUBLIC_WIDTH } from "@/components/public-width";
 
 /** Portal raqamlarda. Chop etilgan maqola bo‘lmasa chizilmaydi ("0 ta maqola" ko‘rsatilmaydi) */
 export function HomeStats() {
@@ -28,7 +28,7 @@ async function Stats() {
   ];
   return (
     <section aria-label="Portal raqamlarda" className="border-b border-line bg-paper">
-      <dl className={`reveal grid grid-cols-2 gap-x-6 gap-y-8 py-10 lg:grid-cols-4 ${HOME_WIDTH}`}>
+      <dl className={`reveal grid grid-cols-2 gap-x-6 gap-y-8 py-10 lg:grid-cols-4 ${PUBLIC_WIDTH}`}>
         {items.map((item) => (
           // Raqam yuqorida ko‘rinadi, ekran o‘quvchi esa avval nomini o‘qiydi (dt → dd)
           <div key={item.label} className="flex flex-col-reverse">

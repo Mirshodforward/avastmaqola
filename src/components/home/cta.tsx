@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { HOME_WIDTH } from "./home-section";
+import { PUBLIC_WIDTH } from "@/components/public-width";
 
 /** Sahifa oxiridagi chaqiriq: o‘qib chiqqan o‘qituvchi tepaga qaytmasdan ro‘yxatdan o‘tadi */
 export function HomeCta() {
   return (
     <section aria-labelledby="cta-title" className="bg-lapis text-on-lapis">
-      <div className={`reveal flex flex-col items-start gap-6 py-16 lg:flex-row lg:items-center lg:justify-between lg:py-20 ${HOME_WIDTH}`}>
+      <div className={`reveal flex flex-col items-start gap-6 py-16 lg:flex-row lg:items-center lg:justify-between lg:py-20 ${PUBLIC_WIDTH}`}>
         <h2 id="cta-title" className="max-w-2xl font-serif text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
           Maqolangizni portalga joylang
         </h2>

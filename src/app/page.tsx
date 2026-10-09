@@ -2,7 +2,7 @@ import Link from "next/link";
 import { HomeAuthors } from "@/components/home/authors";
 import { HomeCta } from "@/components/home/cta";
 import { HomeFeatures } from "@/components/home/features";
-import { HOME_WIDTH } from "@/components/home/home-section";
+import { PUBLIC_WIDTH } from "@/components/public-width";
 import { HomeArticles } from "@/components/home/latest-articles";
 import { HomeNews } from "@/components/home/latest-news";
 import { HomeStats } from "@/components/home/stats";
@@ -21,12 +21,12 @@ export default function HomePage() {
 
       {/* Landing: hero birinchi ekranni to‘liq egallaydi (header balandligi oldindan ma’lum), qolgan bo‘limlar scroll bilan.
           Ma’lumotli bo‘limlar oqim bilan keladi; ular hero’dan pastda, shuning uchun birinchi ekran siljimaydi (CLS).
-          Hamma blok bitta enda (HOME_WIDTH): keng ekranda chetlarda bo‘sh joy, kontent markazda */}
+          Hamma blok bitta enda (PUBLIC_WIDTH): keng ekranda chetlarda bo‘sh joy, kontent markazda */}
       <div className="contents [--header-h:clamp(4.5rem,11svh,5.5rem)]">
-        <header className={`flex min-h-(--header-h) items-center justify-between gap-2 ${HOME_WIDTH}`}>
+        <header className={`flex min-h-(--header-h) items-center justify-between gap-2 ${PUBLIC_WIDTH}`}>
           <SiteBrand />
           {/* Ommaviy sahifalar bilan bitta menyu; 390px’da "Kirish" hero’da bor, header’da faqat sm dan */}
-          <PublicNav home />
+          <PublicNav />
         </header>
 
         {/* h1 va javob-jumla <main> ichida: ekran o‘quvchi "asosiy kontentga o‘tish"da ularni o‘tkazib yubormaydi */}
@@ -35,7 +35,7 @@ export default function HomePage() {
           {/* Osmon birinchi ekranni to‘ldiradi: bo‘shliq, sarlavha va belgi ekran balandligiga (svh) qarab kichrayadi */}
           <section aria-labelledby="hero-title" className="flex min-h-[calc(100svh_-_var(--header-h))] flex-col border-b border-line">
             <div
-              className={`grid flex-1 items-center gap-12 py-[clamp(1.25rem,5svh,4rem)] lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-14 ${HOME_WIDTH}`}
+              className={`grid flex-1 items-center gap-12 py-[clamp(1.25rem,5svh,4rem)] lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-14 ${PUBLIC_WIDTH}`}
             >
               <div>
                 <h1
@@ -79,7 +79,7 @@ export default function HomePage() {
           <HomeCta />
         </main>
 
-        <PublicFooter wide />
+        <PublicFooter />
       </div>
     </>
   );

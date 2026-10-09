@@ -51,7 +51,7 @@ export function ArticleView({
     <article lang="uz" className="mx-auto max-w-3xl break-words">
       {preview && (
         <p className="mb-6 rounded-lg border border-lapis/30 bg-paper px-3 py-2 text-sm text-lapis">
-          Oldindan ko‘rish. Sahifa ommaga faqat administrator tasdiqlagach ochiladi.
+          Oldindan ko‘rish. Sahifa ommaga faqat universitet tasdiqlagach ochiladi.
         </p>
       )}
 

@@ -1,10 +1,5 @@
 import type { ReactNode } from "react";
-
-/**
- * Bosh sahifaning yagona eni: header, hero, bo‘limlar va footer bir chiziqda. Keng ekranda chetlarda 15–20% bo‘sh
- * joy (egasining so‘rovi). xl’da 70%: bo‘limlar menyusi (~870px) bir qatorga sig‘ishi uchun; 2xl dan 60%.
- */
-export const HOME_WIDTH = "mx-auto w-[90%] xl:w-[70%] 2xl:w-[60%]";
+import { PUBLIC_WIDTH } from "@/components/public-width";
 
 /**
  * Bosh sahifa bo‘limi: chapda sarlavha (va havola), o‘ngda mazmun.
@@ -25,7 +20,7 @@ export function HomeSection({
 }) {
   return (
     <section aria-labelledby={id} className={`border-b border-line ${tone === "paper" ? "bg-paper" : ""}`}>
-      <div className={`reveal grid gap-8 py-14 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-12 lg:py-20 ${HOME_WIDTH}`}>
+      <div className={`reveal grid gap-8 py-14 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-12 lg:py-20 ${PUBLIC_WIDTH}`}>
         <div>
           <h2 id={id} className="font-serif text-2xl font-semibold tracking-tight sm:text-3xl">
             {title}

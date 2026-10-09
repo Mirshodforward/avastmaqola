@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { Avatar } from "@/components/profile/avatar";
 import { PublicFooter } from "@/components/public-footer";
 import { PublicHeader } from "@/components/public-header";
+import { PUBLIC_WIDTH } from "@/components/public-width";
 import { UNIVERSITY_NAME } from "@/lib/brand";
 import { avatarUrl } from "@/lib/media";
 import { groupByDirection, listPublicTeachers } from "@/server/profiles/directory";
@@ -19,7 +20,7 @@ export default function DirectionsPage() {
   return (
     <>
       <PublicHeader />
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:px-6">
+      <main className={`flex-1 py-10 ${PUBLIC_WIDTH}`}>
         <h1 className="font-serif text-3xl font-semibold tracking-tight sm:text-4xl">Ilmiy yo‘nalishlar</h1>
         <p className="mt-2 text-muted">Portal mualliflari ilmiy yo‘nalishi bo‘yicha. Maqolasi ko‘p yo‘nalishlar birinchi.</p>
         <Suspense fallback={<ListSkeleton />}>

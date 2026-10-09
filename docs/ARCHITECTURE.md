@@ -84,7 +84,7 @@ flowchart TB
   APP -->|"tezkor so‘rovlar"| EXT
 ```
 
-**Nega navbat?** Tashqi API’lar sekin, ishonchsiz va limitli (Crossref ro‘yxatlarga 1 so‘rov/s, OpenAlex kunlik kredit). Zenodo’ga joylash bir necha qadamdan iborat va qayta urinish talab qiladi. Bular HTTP so‘rov ichida emas, fon vazifasi sifatida, backoff bilan bajariladi.
+**Nega navbat?** Tashqi API’lar sekin, ishonchsiz va limitli (Crossref ro‘yxatlarga 1 so‘rov/s, OpenAlex kunlik kredit). Bular HTTP so‘rov ichida emas, fon vazifasi sifatida, backoff bilan bajariladi. Zenodo’ga joylash (1-versiya) esa navbatsiz: o‘qituvchi Zenodo’da «Authorize» bosgach, callback so‘rovining o‘zida 5–30 soniyada bajariladi; qayta urinishni o‘qituvchi bosadi (5.4).
 
 ### Modullar
 
@@ -96,6 +96,7 @@ flowchart TB
 | `works` | Import konnektorlari, dublikatlarni birlashtirish, sinxronlash | 2-bosqich |
 | `articles` | Yuklash, admin tasdig‘i, ommaviy sahifa, Scholar teglari | ✅ tayyor |
 | `ai` | Muharrirdagi AI yordamchi (Claude): maqolani uch tilda to‘ldirish | ✅ tayyor |
+| `zenodo` | O‘qituvchining o‘z Zenodo akkaunti orqali joylash (OAuth), DOI sahifada | ✅ tayyor (sandbox sinovi kutilmoqda) |
 | `distribution` | Kanal adapterlari, holat kuzatish, operator navbati | 4-bosqich |
 | `admin` | ✅ `/admin`: umumiy statistika, navbat, maqolalar, o‘qituvchilar, AI so‘rovlar; operator paneli (tarqatish) — 5-bosqich | ✅ / 5-bosqich |
 
@@ -111,6 +112,7 @@ src/
     works/connectors/     # orcid.ts, openalex.ts, crossref.ts, datacite.ts, scopus.ts
     articles/
     ai/                   # ✅ Claude: ko‘rsatma, tool-use sikli, limit va statistika
+    zenodo/               # ✅ OAuth, yozuv (metama’lumot), joylash — 5.4
     distribution/channels/  # zenodo.ts, osf.ts, manual.ts
     jobs/                 # pg-boss vazifalari
   worker.ts               # alohida jarayon
@@ -136,12 +138,13 @@ interface PublishChannel {
 
 ## 4. Ma’lumotlar modeli
 
-Hozir mavjud ([schema.ts](../src/server/db/schema.ts)): `users`, `auth_requests`, `sessions`, `profiles`, `articles`, `article_authors`, `ai_requests`.
+Hozir mavjud ([schema.ts](../src/server/db/schema.ts)): `users`, `auth_requests`, `sessions`, `profiles`, `articles`, `article_authors`, `ai_requests`, `zenodo_deposits`.
 
 - **profiles** — `users` bilan 1:1, birinchi saqlashda yaratiladi. `slug` o‘zgarmaydi (havolalar buzilmasin). Telefon va Telegram ommaviy so‘rovlarda hech qachon tanlanmaydi.
 - **articles** — URL `/maqola/{id}` (raqam: uch tildagi sarlavhadan slug tanlab bo‘lmaydi). Ixtiyoriy nashr ma’lumotlari (maqola jurnal yoki konferensiya to‘plamida allaqachon chiqqan bo‘lsa): `venue_type` (journal|conference), `venue`, `volume`, `issue`, `pages` (oraliq yoki maqola raqami), `pub_year`, `doi` (prefiksisiz, DB CHECK) — Scholar teglari va iqtiboslarda ishlatiladi. Uch til uchun 9 ustun (`title_/abstract_/keywords_` × `uz|ru|en`) va `lang` — PDF tili, h1 va `citation_title` shu tilda. Holatlar: `draft → submitted → published`, `rejected` (tuzatishga qaytgan yoki saytdan olib tashlangan). `published_at` birinchi chop etishda qo‘yiladi va o‘zgarmaydi. DB CHECK: yuborilgan maqolada barcha 9 matn, PDF va huquq tasdig‘i bo‘lishi shart.
 - **article_authors** — mualliflar PDF’dagi tartibda (`citation_author` shu tartibda chiqadi). Faqat o‘qituvchining o‘z qatori `user_id` bilan bog‘langan, hammualliflar oddiy matn.
 - **ai_requests** — AI yordamchiga har bir so‘rov: holat, tokenlar (kesh bilan), taxminiy narx (mikrodollar), davomiylik, xato kodi. Kunlik limit va admin statistikasi shundan. Suhbat matni saqlanmaydi.
+- **zenodo_deposits** — maqolaning Zenodo’dagi nusxasi: kalit `(article_id, host)` — bitta Zenodo serverida bitta yozuv, sandbox va production qatorlari bir-biriga xalaqit bermaydi; `status` (in_progress, published, failed), `record_id` (qoralama yaratilishi bilan yoziladi), `doi`, `zenodo_user_id` (bitta Zenodo akkaunt — bitta o‘qituvchi), `error`. Token saqlanmaydi. `articles` qatoriga tegilmaydi. `distributions` — ikkinchi API kanal (OSF) qo‘shilganda.
 
 Rejadagi jadvallar:
 
@@ -159,7 +162,7 @@ erDiagram
 
 - **works** — yig‘ilgan maqola: `doi` (kichik harfda), `title`, `title_normalized`, `year`, `type`, `venue`, `authors jsonb`, `citation_count`. Unikal kalit: `(user_id, doi)`, faqat DOI bor bo‘lsa.
 - **work_sources** — har bir manbadagi asl yozuv: `source`, `external_id`, `raw jsonb`, `fetched_at`. Unikal kalit: `(source, external_id)`.
-- **articles** — 4-bosqichda `doi` ustuni qo‘shiladi (Zenodo’dan qaytgan DOI).
+- **articles.doi** — maqola boshqa joyda chop etilgan bo‘lsa, nashriyot DOI’si. Zenodo DOI’si bu yerga yozilmaydi.
 - **distributions** — maqolaning har bir kanaldagi holati: `channel`, `status` (queued, in_progress, published, failed, manual_pending, manual_done), `external_id`, `external_url`, `attempts`, `last_error`. Unikal kalit: `(article_id, channel)`.
 
 **Dublikatlarni birlashtirish** (bitta maqola ORCID, OpenAlex va Crossref’dan uch marta keladi):
@@ -218,26 +221,34 @@ Ommaviy sahifalar (`/maqola/[id]`, `/oqituvchi/[slug]`) `ensureStatic = 'navigat
 
 ```mermaid
 sequenceDiagram
-  actor U as O‘qituvchi
-  participant S as Avtomaqola
-  participant Q as Navbat
+  actor T as O‘qituvchi (brauzer)
+  participant A as Avtomaqola
   participant Z as Zenodo
-  participant D as DataCite
-  participant O as ORCID
-  participant G as Google Scholar
-  U->>S: PDF va metadata, «Joylash»
-  S->>S: Admin tasdig‘idan keyin ommaviy sahifa (citation_* teglar) ochiladi
-  S->>Q: distribute(article, zenodo)
-  Q->>Z: deposit, fayl, metadata, publish
-  Z-->>Q: DOI 10.5281/zenodo.N
-  Q->>S: DOI sahifaga yoziladi, holat published
-  S-->>U: Telegram: Zenodo’da joylandi, DOI
-  Z->>D: DOI metadata (ORCID iD bilan)
-  D->>O: auto-update (ruxsat berilgan bo‘lsa)
-  G-->>S: crawl (bir necha kundan haftagacha)
+  T->>A: POST /api/articles/{id}/zenodo {rights:true, hash}
+  A-->>T: Set-Cookie am_zenodo={id}.{nonce}.{hash} · {url}
+  T->>Z: GET /oauth/authorize?…&state=HMAC(user,id,nonce,hash)
+  Z-->>T: login (kerak bo‘lsa) → «Authorize» → 302 /api/zenodo/callback?code&state
+  T->>A: GET /api/zenodo/callback (sessiya + am_zenodo cookie)
+  A->>A: state ✓ · maqola o‘ziniki va published ✓ · hash ✓ · CAS claim
+  A->>Z: POST /oauth/token (form: code, client_secret)
+  Z-->>A: access_token, user.id (token faqat xotirada)
+  A->>A: bitta Zenodo akkaunt — bitta o‘qituvchi ✓
+  A->>Z: POST /api/records → id (darhol bazaga) → files → PUT content → commit (md5 ✓)
+  A->>A: maqola hali published ✓
+  A->>Z: POST /api/records/{id}/draft/actions/publish
+  Z-->>A: 202 pids.doi.identifier
+  A->>A: qator = published · revalidateTag(article:{id}) · after(): sahifa + Telegram
+  A-->>T: 303 /dashboard/articles/{id} (DOI ko‘rinadi)
+  Z->>Z: DataCite (async) → ORCID Auto-Update
 ```
 
-- **Zenodo’ni ulash:** o‘qituvchi kabinetda o‘z Zenodo akkauntini OAuth orqali ulaydi (Zenodo’ga ORCID bilan kirish tavsiya etiladi), shunda yuklovchi muallifning o‘zi bo‘ladi. Chop etishdan oldin o‘qituvchi yakuniy ko‘rinishni tasdiqlaydi — chop etilgan yozuvni o‘chirib bo‘lmaydi.
+- **Har joylashda Zenodo ruxsati** (OAuth, kalit saqlanmaydi): yuklovchi — o‘qituvchining o‘z Zenodo akkaunti (Zenodo’ga ORCID bilan kirish tavsiya etiladi). O‘qituvchi kabinetdagi Zenodo panelida yuboriladigan ma’lumotni ko‘rib, huquqini tasdiqlaydi — chop etilgan yozuvni o‘chirib bo‘lmaydi.
+- **Qaysi maqola:** faqat egasi joylaydi, faqat admin chop etgan va saytda birinchi chop etilgan maqola (jurnal yoki nashriyot DOI’si bori — yo‘q). Bitta Zenodo serverida bitta yozuv; adminlar joylamaydi.
+- **Yozuv** ([record.ts](../src/server/zenodo/record.ts)): `publication-preprint`, publisher "Zenodo", sana — saytda chop etilgan kun (Toshkent); sarlavha va annotatsiya PDF tilida, qolgan ikki til — tarjima sifatida; ORCID iD’lar; AI yordamchi maydon taklif qilgan bo‘lsa — AI izohi (Zenodo talabi). `pids` va `custom_fields` yuborilmaydi (ISSN IsPartOf bo‘lib, ORCID’ga avtomatik tushishni to‘sadi). Panel ko‘rsatgan yozuv xesh bilan (metama’lumot + `pdf_key`) callback’da qayta tekshiriladi.
+- **Xavfsizlik:** `state` = HMAC(AUTH_SECRET; foydalanuvchi, maqola, nonce, xesh) joriy sessiya bilan timing-safe solishtiriladi. Token faqat callback so‘rovi xotirasida, refresh token tashlanadi. Har so‘rovda `User-Agent: Avtomaqola/1.0 (+APP_URL)` — zenodo.org Node’ning standart UA’siga HTML 403 qaytaradi (sandbox qaytarmaydi). Manzil faqat zenodo.org yoki sandbox.zenodo.org (testda lokal mock), `redirect: "error"`.
+- **Ishonchlilik:** kod tokenga almashtirilishidan oldin bazada compare-and-set — parallel callback’lar kodni ikki marta almashtirmaydi (`?zenodo=busy`). `record_id` qoralama yaratilishi bilan yoziladi: qayta urinish chop etilganini oladi yoki qoralamani o‘chiradi — ikkinchi DOI chiqmaydi. md5 mos kelmasa yoki shu orada maqola saytdan olib tashlansa, chop etilmaydi. Bitta Zenodo akkaunti — bitta o‘qituvchi. 10 daqiqadan eski `in_progress` — uzilgan urinish. Xato sababi panelda; rejected, blocked, config va internal xatolar adminlarga Telegram’da.
+- **Sahifada** faqat zenodo.org DOI’si (`10.5281/…`): DOI qatori, `citation_doi`, JSON-LD `sameAs`, APA va BibTeX. Nashriyot DOI’si bo‘lsa — u ustun. Sandbox DOI’si faqat o‘qituvchi panelida («Zenodo (sinov)»). Admin maqolani saytdan olib tashlasa, Zenodo’dagi nusxa qoladi (tasdiqlash oynasida yoziladi).
+- **Testlar:** `node tests/zenodo/run.mjs` — Zenodo mock’i ([mock.mjs](../tests/zenodo/mock.mjs)) va alohida `next build` + `next start -p 3100`; dev server va boshqa ma’lumotlarga tegmaydi.
 - **Onboarding sharti:** o‘qituvchi DataCite Commons’da "ORCID Auto-Update" ni **birinchi Zenodo yuklashidan oldin** yoqishi kerak — u faqat yoqilgandan keyin ro‘yxatdan o‘tgan DOI’larni ORCID’ga yuboradi.
 - **Google Scholar talablari:** har bir maqola alohida URL’da; annotatsiya login’siz ko‘rinadi; PDF ≤5 MB va matn qatlami bor; teglar `citation_title`, `citation_author` (har bir muallif uchun alohida), `citation_publication_date`, `citation_pdf_url`; bosh sahifadan ko‘pi bilan 10 ta havola orqali yetib borish mumkin.
 - **Qo‘lda kanallar** (ResearchGate, mahalliy jurnallar): `distributions.status = manual_pending`, o‘qituvchi yoki operatorga nusxa olishga tayyor metadata va havola ko‘rsatiladi.
@@ -261,7 +272,7 @@ Muharrirning o‘ng tomonida (mobilda alohida oynada) chat. O‘qituvchi PDF’n
 - **Monolit + worker**, mikroservis emas: kichik jamoa, bitta deploy.
 - **Drizzle ORM**: sxema TypeScript’da, SQL’ga yaqin, kod generatsiyasi yo‘q.
 - **Telegram orqali kod**: SMS-provayder xarajati yo‘q, Telegram O‘zbekistonda keng tarqalgan. Kanal almashtiriladigan qilib yozilgan — kerak bo‘lsa SMS (masalan, Eskiz) qo‘shiladi.
-- **ORCID iD profil tahririda qo‘lda kiritiladi** (ro‘yxatdan o‘tishda so‘ralmaydi), ya’ni "tasdiqlanmagan" (`users.orcid_verified_at`). Nazorat raqami va iD mavjudligi tekshiriladi, lekin birov boshqa odamning iD’sini yozishi mumkin. 2-bosqichda "Sign in with ORCID" (`/authenticate` — bepul) qo‘shiladi va tarqatish faqat tasdiqlangan iD uchun ochiladi.
+- **ORCID iD profil tahririda qo‘lda kiritiladi** (ro‘yxatdan o‘tishda so‘ralmaydi), ya’ni "tasdiqlanmagan" (`users.orcid_verified_at`). Nazorat raqami va iD mavjudligi tekshiriladi, lekin birov boshqa odamning iD’sini yozishi mumkin. Zenodo’ga tarqatish hozircha tasdiqlanmagan iD bilan ham ochiq: admin mualliflar va ORCID’larni PDF bilan solishtiradi; "Sign in with ORCID" (`/authenticate` — bepul) qurilgach, shart kuchaytiriladi.
 - **Mualliflik huquqi:** jurnalda allaqachon chop etilgan maqolani Zenodo’ga qayta yuklash nashriyot siyosatiga bog‘liq. Yuklashda o‘qituvchi huquqini tasdiqlaydi. Chop etilgan maqola uchun "faqat annotatsiya + jurnal DOI havolasi" rejimi **faqat bizning saytda** bo‘ladi, chunki Zenodo faqat annotatsiyadan iborat yozuvni qabul qilmaydi.
 - **Zenodo qoidalari** (2026-oktyabrda tekshirilgan):
   - **Javobgarlik:** yuklovchi o‘z kontenti uchun to‘liq javobgar.
@@ -301,6 +312,7 @@ Muharrirning o‘ng tomonida (mobilda alohida oynada) chat. O‘qituvchi PDF’n
 - **nginx:** `client_max_body_size 11m;` va `proxy_set_header X-Real-IP $remote_addr;` (IP bo‘yicha limitlar shu sarlavhaga tayanadi — `X-Forwarded-For`ning birinchi qiymatini mijoz soxtalashtira oladi). Mavjud bo‘lmagan `/maqola/N` va `/oqituvchi/x` manzillari ham 404 sifatida diskka keshlanadi — botlar uchun `limit_req` qo‘ying.
 - **Administrator:** foydalanuvchi saytda ro‘yxatdan o‘tgach, `npm run admin -- +998901234567`. Yangi maqolalar haqida Telegram xabari adminlarga boradi.
 - **AI yordamchi:** `ANTHROPIC_API_KEY` (lokal `.env.local`da `CLAUDE-API-KEY` nomi ham o‘qiladi; systemd/shell defisli nomni qabul qilmaydi). Kalit bo‘lmasa panel ko‘rinmaydi. Javob oqim bo‘lib keladi: server `X-Accel-Buffering: no` qo‘yadi, nginx’da `/api/articles/` uchun `proxy_read_timeout 300s;` (model uzoq o‘ylaganda server har 15 soniyada bo‘sh qator yuboradi).
+- **Zenodo:** `ZENODO_URL` (`https://sandbox.zenodo.org` yoki `https://zenodo.org`, boshqasi qabul qilinmaydi), `ZENODO_CLIENT_ID`, `ZENODO_CLIENT_SECRET` — uchalasi bo‘lmasa panel ko‘rinmaydi, chop etilgan DOI’lar sahifada qoladi. Har Zenodo serveri uchun alohida OAuth ilova (Confidential, Redirect URI `{APP_URL}/api/zenodo/callback`); sandbox’dan production’ga o‘tish — faqat shu uch o‘zgaruvchi (qatorlar `host` bo‘yicha alohida). Callback sinxron, eng yomoni ~7 daqiqa: nginx’da `location /api/zenodo/ { proxy_read_timeout 420s; }`. Production’dan oldin support@zenodo.org’ga integratsiyani tasvirlab yozish shart. Secret sizib chiqsa — Zenodo’da «Reset client secret»; suiiste’mol bo‘lsa — OAuth ilovani o‘chirish (barcha tokenlari bilan).
 
 ## 8. Bosqichlar
 
