@@ -21,7 +21,7 @@ export default function AboutPage() {
         <div className="max-w-3xl">
           <h1 className="font-serif text-3xl font-semibold tracking-tight sm:text-4xl">Portal haqida</h1>
           <p className="mt-4 text-lg leading-relaxed">
-            {`${UNIVERSITY_NAME} oâqituvchilari ilmiy maqolalarini shu portalga joylaydi. Universitet tasdiqlagan har bir maqola oâzbek, rus va ingliz tilidagi annotatsiyasi va PDF fayli bilan alohida sahifada hammaga ochiq.`}
+            {`${UNIVERSITY_NAME} o‘qituvchilari ilmiy maqolalarini shu portalga joylaydi. Universitet tasdiqlagan har bir maqola o‘zbek, rus va ingliz tilidagi annotatsiyasi va PDF fayli bilan alohida sahifada hammaga ochiq.`}
           </p>
   
           <section aria-labelledby="steps-title" className="mt-10">
@@ -48,8 +48,8 @@ export default function AboutPage() {
               Ochiq kirish va iqtibos
             </h2>
             <p className="mt-3 leading-relaxed">
-              Maqolalar ochiq kirishda (CC BY 4.0): muallifni koârsatgan holda oâqish va tarqatish mumkin. Har bir sahifada Google Scholar
-              uchun meta teglar va tayyor iqtibos (APA, BibTeX) bor. Oâqituvchi profiliga ORCID iD va Google Scholar profili bogâlanadi.
+              Maqolalar ochiq kirishda (CC BY 4.0): muallifni ko‘rsatgan holda o‘qish va tarqatish mumkin. Har bir sahifada Google Scholar
+              uchun meta teglar va tayyor iqtibos (APA, BibTeX) bor. O‘qituvchi profiliga ORCID iD va Google Scholar profili bog‘lanadi.
             </p>
           </section>
   
@@ -62,7 +62,7 @@ export default function AboutPage() {
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
               <Link href="/register" className="btn btn-primary">
-                Roâyxatdan oâtish
+                Ro‘yxatdan o‘tish
               </Link>
               <Link href="/login" className="btn btn-secondary">
                 Kirish
