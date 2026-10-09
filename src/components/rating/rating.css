@@ -1,0 +1,432 @@
+/*
+ * "Asman" — osmon: reyting bo‘limi sahifadagi yagona to‘q sirt (universitet logotipi rangi).
+ * Oltin rang faqat baho uchun ishlatiladi: yulduzlar, o‘rtacha baho, taqsimot chiziqlari.
+ * Klasslar global, shuning uchun hammasi "rt-" bilan boshlanadi (sabab: styles.ts).
+ */
+.rt-sky {
+  --sky: #0b1d3a;
+  --sky-deep: #050d1f;
+  --sky-ink: #e9eef8;
+  --sky-muted: #a3b2cf;
+  --sky-line: rgb(255 255 255 / 0.12);
+  --gold: #f4b740;
+  --gold-glow: rgb(244 183 64 / 0.45);
+  --ring: #4fc2c0;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 1.75rem;
+  color: var(--sky-ink);
+  background:
+    radial-gradient(110% 70% at 90% -10%, rgb(79 194 192 / 0.16), transparent 60%),
+    radial-gradient(90% 70% at -10% 110%, rgb(43 89 195 / 0.5), transparent 65%),
+    linear-gradient(180deg, var(--sky), var(--sky-deep));
+}
+/* Uzoqdagi yulduzlar: bir necha nuqta, harakatsiz */
+.rt-sky::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, rgb(255 255 255 / 0.7), transparent 60%),
+    radial-gradient(1px 1px at 28% 72%, rgb(255 255 255 / 0.45), transparent 60%),
+    radial-gradient(1.5px 1.5px at 46% 9%, rgb(255 255 255 / 0.6), transparent 60%),
+    radial-gradient(1px 1px at 63% 38%, rgb(255 255 255 / 0.4), transparent 60%),
+    radial-gradient(1px 1px at 78% 86%, rgb(255 255 255 / 0.5), transparent 60%),
+    radial-gradient(1.5px 1.5px at 93% 24%, rgb(255 255 255 / 0.55), transparent 60%),
+    radial-gradient(1px 1px at 6% 56%, rgb(255 255 255 / 0.35), transparent 60%),
+    radial-gradient(1px 1px at 55% 94%, rgb(255 255 255 / 0.35), transparent 60%),
+    radial-gradient(1px 1px at 37% 44%, rgb(255 255 255 / 0.3), transparent 60%);
+}
+.rt-sky :focus-visible {
+  outline-color: var(--ring);
+}
+
+.rt-title {
+  font-family: var(--font-literata), Georgia, serif;
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.rt-muted {
+  color: var(--sky-muted);
+}
+
+/* O‘rtacha baho: qatlamli soya — raqam oltin plastinkadek bo‘rtib turadi */
+.rt-numeral {
+  font-family: var(--font-literata), Georgia, serif;
+  font-size: clamp(4rem, 11vw, 5.75rem);
+  font-weight: 600;
+  line-height: 0.9;
+  letter-spacing: -0.03em;
+  color: #ffd56b;
+  text-shadow:
+    0 1px 0 #e7a52a,
+    0 2px 0 #d29117,
+    0 3px 0 #bb7d0d,
+    0 4px 0 #a26a07,
+    0 5px 0 #8a5905,
+    0 12px 20px rgb(0 0 0 / 0.55),
+    0 0 44px rgb(244 183 64 / 0.22);
+}
+
+/* Yulduzlar: SVG rangi currentColor, qirralari ustma-ust yorug‘/soya qatlam */
+.rt-stars {
+  display: inline-flex;
+  gap: 0.12em;
+  vertical-align: middle;
+}
+.rt-slot {
+  position: relative;
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  flex: none;
+}
+.rt-slot > svg,
+.rt-fill > svg {
+  display: block;
+  width: 1em;
+  height: 1em;
+}
+.rt-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  overflow: hidden;
+}
+.rt-on {
+  color: var(--gold, #f4b740);
+  filter: drop-shadow(0 0 0.16em var(--gold-glow, rgb(244 183 64 / 0.45)));
+}
+.rt-off {
+  color: rgb(255 255 255 / 0.16);
+}
+/* Oq sahifada (maqola tepasidagi havola, admin): to‘qroq oltin (oq fonda 4:1), porlashsiz */
+.rt-paper .rt-on {
+  color: #a87000;
+  filter: none;
+}
+.rt-paper .rt-off {
+  color: color-mix(in oklab, var(--ink) 16%, transparent);
+}
+
+/* Taqsimot */
+.rt-track {
+  height: 0.5rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.08);
+  overflow: hidden;
+}
+.rt-bar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #b7790c, #f4b740 65%, #ffe29a);
+  box-shadow: 0 0 12px rgb(244 183 64 / 0.35);
+}
+
+/* 3D iqtiboslar to‘plami. Balandlik komponentda: ortdagi kartalar soniga qarab */
+.rt-deck {
+  position: relative;
+  /* Gorizontal surishni brauzer o‘ziga olmasin (aks holda pointercancel), vertikal aylantirish ishlayveradi */
+  touch-action: pan-y;
+  perspective: 1300px;
+  perspective-origin: 30% 30%;
+}
+.rt-deck-inner {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform: rotateX(7deg) rotateY(10deg);
+  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.rt-deck:hover .rt-deck-inner,
+.rt-deck:focus-within .rt-deck-inner {
+  transform: rotateX(2deg) rotateY(4deg);
+}
+.rt-plate {
+  --d: 0;
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  display: flex;
+  min-height: 14rem;
+  flex-direction: column;
+  border: 1px solid rgb(255 255 255 / 0.13);
+  border-radius: 1.25rem;
+  padding: 1.5rem 1.5rem 1.25rem;
+  /* Shaffof emas: orqadagi kartaning matni old karta orqali ko‘rinmasin */
+  background: linear-gradient(160deg, #213660, #0b1731);
+  box-shadow: 0 30px 60px -30px rgb(0 0 0 / 0.85);
+  backface-visibility: hidden;
+  transform: translate3d(calc(var(--d) * 22px), calc(var(--d) * -40px), calc(var(--d) * -34px)) scale(calc(1 - var(--d) * 0.035));
+  opacity: calc(1 - var(--d) * 0.24);
+  z-index: calc(10 - var(--d));
+  transition:
+    transform 0.55s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.45s,
+    border-color 0.3s;
+}
+.rt-plate[data-front] {
+  border-color: rgb(244 183 64 / 0.45);
+  box-shadow:
+    0 40px 80px -36px rgb(0 0 0 / 0.9),
+    0 0 48px -14px rgb(244 183 64 / 0.4);
+  cursor: pointer;
+}
+.rt-plate[data-hidden] {
+  opacity: 0;
+  pointer-events: none;
+}
+.rt-quote-mark {
+  font-family: var(--font-literata), Georgia, serif;
+  font-size: 3.25rem;
+  line-height: 0.6;
+  color: var(--gold);
+  text-shadow: 0 0 18px rgb(244 183 64 / 0.35);
+}
+.rt-quote {
+  font-family: var(--font-literata), Georgia, serif;
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.rt-clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+.rt-avatar {
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: none;
+  place-items: center;
+  border-radius: 0.75rem;
+  font-weight: 700;
+  color: #fff;
+  box-shadow: 0 10px 22px -10px rgb(0 0 0 / 0.7);
+}
+.rt-round {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border: 1px solid var(--sky-line);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.05);
+  color: var(--sky-ink);
+  transition:
+    background-color 0.2s,
+    border-color 0.2s;
+}
+.rt-round:hover {
+  border-color: rgb(255 255 255 / 0.3);
+  background: rgb(255 255 255 / 0.1);
+}
+
+/* Forma */
+.rt-panel {
+  border: 1px solid var(--sky-line);
+  border-radius: 1.25rem;
+  background: rgb(255 255 255 / 0.045);
+  padding: 1.5rem;
+}
+.rt-picker {
+  display: flex;
+  gap: 0.25rem;
+}
+.rt-pick {
+  position: relative;
+  display: grid;
+  place-items: center;
+  border-radius: 0.75rem;
+  padding: 0.25rem;
+  color: rgb(255 255 255 / 0.18);
+  cursor: pointer;
+}
+.rt-pick input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.rt-pick svg {
+  display: block;
+  width: 2.5rem;
+  height: 2.5rem;
+  transition:
+    transform 0.35s cubic-bezier(0.3, 1.6, 0.5, 1),
+    color 0.2s,
+    filter 0.2s;
+}
+.rt-pick[data-lit] {
+  color: var(--gold);
+}
+.rt-pick[data-lit] svg {
+  filter: drop-shadow(0 0 0.35rem var(--gold-glow));
+}
+/* Tanlanmagan yulduz ham boshqaruv elementi: chegarasi fonda aniq ko‘rinsin (WCAG 1.4.11) */
+.rt-pick:not([data-lit]) svg path:first-child {
+  stroke: var(--sky-muted);
+}
+.rt-pick:hover svg {
+  transform: translateY(-4px) scale(1.12) rotate(-8deg);
+}
+.rt-pick:has(input:focus-visible) {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.rt-pick[data-picked] svg {
+  animation: rt-star-pop 0.45s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+@keyframes rt-star-pop {
+  0% {
+    transform: scale(0.8);
+  }
+  60% {
+    transform: scale(1.28) rotate(8deg);
+  }
+  100% {
+    transform: none;
+  }
+}
+.rt-field {
+  width: 100%;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: 0.75rem;
+  background: rgb(5 13 31 / 0.55);
+  color: var(--sky-ink);
+  padding: 0.75rem 0.875rem;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+.rt-field::placeholder {
+  color: rgb(163 178 207 / 0.75);
+}
+.rt-field:focus {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px rgb(79 194 192 / 0.25);
+}
+.rt-field[aria-invalid="true"] {
+  border-color: #ff8a80;
+}
+.rt-error {
+  color: #ff9d94;
+}
+.rt-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--sky-ink);
+  color: var(--sky);
+  padding: 0.75rem 1.5rem;
+  font-weight: 600;
+  transition: background-color 0.15s;
+}
+.rt-submit:hover:not([aria-disabled="true"]) {
+  background: #ffffff;
+}
+.rt-submit[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.rt-ghost {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--sky-line);
+  border-radius: 999px;
+  padding: 0.625rem 1.25rem;
+  font-weight: 500;
+  transition: border-color 0.15s;
+}
+.rt-ghost:hover {
+  border-color: rgb(255 255 255 / 0.35);
+}
+
+/* Barcha iqtiboslar */
+.rt-all > summary {
+  display: inline-flex;
+  cursor: pointer;
+  list-style: none;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--sky-line);
+  border-radius: 999px;
+  padding: 0.625rem 1.25rem;
+  font-weight: 500;
+}
+.rt-all > summary::-webkit-details-marker {
+  display: none;
+}
+.rt-all > summary::after {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 0.2s;
+}
+.rt-all[open] > summary::after {
+  transform: translateY(2px) rotate(-135deg);
+}
+.rt-all > summary:hover {
+  border-color: rgb(255 255 255 / 0.35);
+}
+
+@media (max-width: 639px) {
+  .rt-deck-inner,
+  .rt-deck:hover .rt-deck-inner,
+  .rt-deck:focus-within .rt-deck-inner {
+    transform: rotateX(5deg) rotateY(4deg);
+  }
+  .rt-plate {
+    transform: translate3d(calc(var(--d) * 10px), calc(var(--d) * -30px), calc(var(--d) * -30px)) scale(calc(1 - var(--d) * 0.04));
+  }
+}
+
+/* 320px yoki 400% kattalashtirish: beshta yulduz formaga sig‘sin (bosish maydoni ~36px qoladi) */
+@media (max-width: 379px) {
+  .rt-pick svg {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+}
+
+/* Windows yuqori kontrast rejimi: gradientlar yo‘qoladi — kartalar shaffof bo‘lib qolmasin, to‘la/bo‘sh yulduz farqlansin */
+@media (forced-colors: active) {
+  .rt-plate {
+    background: Canvas;
+  }
+  .rt-on,
+  .rt-paper .rt-on,
+  .rt-pick[data-lit] {
+    color: Highlight;
+  }
+  .rt-off,
+  .rt-paper .rt-off,
+  .rt-pick {
+    color: GrayText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rt-deck-inner,
+  .rt-plate,
+  .rt-pick svg {
+    transition: none;
+  }
+  .rt-pick[data-picked] svg {
+    animation: none;
+  }
+  .rt-pick:hover svg {
+    transform: none;
+  }
+}

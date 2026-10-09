@@ -1,6 +1,7 @@
 import "server-only";
 import { LICENSE_INFO } from "@/lib/article-rules";
 import { UNIVERSITY_NAME } from "@/lib/brand";
+import { doiUrl } from "@/lib/citation";
 import { formatBytes, scholarDate, truncate } from "@/lib/format";
 import { profileUrl } from "../profiles/json-ld";
 import { siteUrl } from "../site";
@@ -12,12 +13,28 @@ export const pdfUrl = (id: number) => `${siteUrl()}/maqola/${id}/pdf`;
 /**
  * Google Scholar teglari (Highwire Press). Rasmiy ro‘yxatdagi uchta majburiy teg + PDF havolasi.
  * Mualliflar sahifadagi tartibda, ism "Familiya, Ism" ko‘rinishida, unvon va muassasasiz.
+ * Maqola jurnal yoki konferensiya to‘plamida chiqqan bo‘lsa — uning ma’lumotlari va asl nashr yili:
+ * Scholar bu nusxani asl nashrning bir versiyasi sifatida guruhlashi uchun.
  */
 export function citationMeta(v: ArticleView): Record<string, string | string[]> {
+  const p = v.publication;
+  // Nashriyot DOI’si bo‘lmasa — Zenodo DOI’si
+  const doi = p?.doi ?? v.zenodoDoi;
+  // "125–128" → birinchi va oxirgi bet; maqola raqami ("1412603") — faqat birinchisi
+  const [firstPage, lastPage] = p?.pages?.split(/\s*[-–—]\s*/) ?? [];
+  const date = p?.year ? String(p.year) : v.publishedAt ? scholarDate(v.publishedAt) : null;
   return {
     citation_title: v.titles[v.lang],
     citation_author: v.authors.map((a) => `${a.familyName}, ${a.givenName}`),
-    ...(v.publishedAt ? { citation_publication_date: scholarDate(v.publishedAt) } : {}),
+    ...(date ? { citation_publication_date: date } : {}),
+    ...(p?.venue && p.type
+      ? { [p.type === "journal" ? "citation_journal_title" : "citation_conference_title"]: p.venue }
+      : {}),
+    ...(p?.volume ? { citation_volume: p.volume } : {}),
+    ...(p?.issue ? { citation_issue: p.issue } : {}),
+    ...(firstPage ? { citation_firstpage: firstPage } : {}),
+    ...(lastPage ? { citation_lastpage: lastPage } : {}),
+    ...(doi ? { citation_doi: doi } : {}),
     ...(v.pdfBytes ? { citation_pdf_url: pdfUrl(v.id) } : {}),
   };
 }
@@ -30,6 +47,8 @@ export function articleJsonLd(v: ArticleView) {
   const license = LICENSE_INFO[v.license].url;
   // Asosiy til ingliz bo‘lmasa, inglizcha sarlavha xalqaro qidiruv uchun muqobil sarlavha bo‘ladi
   const alternative = v.lang !== "en" ? v.titles.en : v.titles.uz;
+  const p = v.publication;
+  const doi = p?.doi ?? v.zenodoDoi;
 
   return {
     "@context": "https://schema.org",
@@ -62,6 +81,11 @@ export function articleJsonLd(v: ArticleView) {
                   : {}),
               },
         ),
+        ...(doi ? { sameAs: doiUrl(doi) } : {}),
+        ...(p?.venue && p.type
+          ? { isPartOf: { "@type": p.type === "journal" ? "Periodical" : "Book", name: p.venue } }
+          : {}),
+        ...(p?.pages ? { pagination: p.pages } : {}),
         publisher: { "@type": "CollegeOrUniversity", "@id": `${site}/#university`, name: UNIVERSITY_NAME },
         ...(license ? { license } : {}),
         isAccessibleForFree: true,

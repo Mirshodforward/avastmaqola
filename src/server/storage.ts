@@ -7,7 +7,7 @@ import path from "node:path";
 // turbopackIgnore: bu runtime ma’lumoti — build uni (va butun loyihani) server bundle’iga kuzatib qo‘shmasin
 const ROOT = path.resolve(/*turbopackIgnore: true*/ process.env.STORAGE_DIR ?? "storage");
 
-export type Bucket = "avatars" | "articles";
+export type Bucket = "avatars" | "articles" | "news";
 
 function filePath(bucket: Bucket, name: string) {
   // Yo‘l kesib o‘tishdan (path traversal) himoya: faqat oddiy fayl nomlari

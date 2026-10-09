@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { ArticleList, type ArticleListEntry } from "@/components/article/article-list";
+import { PublicFooter } from "@/components/public-footer";
 import { PublicHeader } from "@/components/public-header";
 import { UNIVERSITY_NAME } from "@/lib/brand";
 import { yearOf } from "@/lib/format";
@@ -27,6 +28,7 @@ export default function ArticlesPage() {
           <ArticlesByYear />
         </Suspense>
       </main>
+      <PublicFooter />
     </>
   );
 }

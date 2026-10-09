@@ -58,7 +58,7 @@ async function Teachers({ searchParams }: Pick<Props, "searchParams">) {
               <th scope="col" rowSpan={2} className={th}>
                 Profil
               </th>
-              <th scope="colgroup" colSpan={4} className={`${th} text-center`}>
+              <th scope="col" colSpan={4} className={`${th} text-center`}>
                 Maqolalar
               </th>
               <th scope="col" rowSpan={2} className={`${th} ${numeric}`}>

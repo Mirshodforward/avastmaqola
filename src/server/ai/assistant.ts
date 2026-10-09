@@ -21,16 +21,19 @@ import { normalizeProposal, toolInputSchema, type AssistantRequest, type ToolInp
 
 const CACHE = { type: "ephemeral" } as const;
 /** Model taklifni bir necha qadamda (masalan, har til alohida) yozishi mumkin; cheksiz aylanmasin */
-const MAX_ROUNDS = 3;
+const MAX_ROUNDS = 4;
+const FIELD_KEY = /"(lang|title(?:Uz|Ru|En)|abstract(?:Uz|Ru|En)|keywords(?:Uz|Ru|En)|authors)"\s*:/g;
 
 const pdfBlock = (data: string) =>
   ({ type: "document", source: { type: "base64", media_type: "application/pdf", data } }) as const;
 
+type PdfState = "attached" | "too_large" | "unreadable" | "none";
+
 /** PDF hajmi tokenlarda, pdfKey bo‘yicha (kalit har yuklashda yangi): har xabarda qayta sanalmaydi */
 const pdfTokens = new Map<string, number>();
 
-/** PDF base64’da; juda katta bo‘lsa null — model bu haqda o‘qituvchiga o‘zi aytadi */
-async function loadPdf(client: Anthropic, key: string): Promise<string | null> {
+/** Modelga yuboriladigan PDF (base64) yoki nega yuborilmagani — model bu haqda o‘qituvchiga o‘zi aytadi */
+async function loadPdf(client: Anthropic, key: string): Promise<{ data: string | null; state: PdfState }> {
   const data = (await readStoredFile("articles", key)).toString("base64");
   let tokens = pdfTokens.get(key);
   if (tokens === undefined) {
@@ -40,13 +43,16 @@ async function loadPdf(client: Anthropic, key: string): Promise<string | null> {
         messages: [{ role: "user", content: [pdfBlock(data), { type: "text", text: "." }] }],
       }));
     } catch (error) {
+      // 400 — API faylni ocha olmadi (buzuq, parolli, 600 sahifadan ko‘p). Eslab qolinmaydi: 400 akkaunt
+      // muammosidan (masalan, balans) ham bo‘lishi mumkin — u tuzalgach PDF yana o‘qilsin
+      if (error instanceof Anthropic.BadRequestError) return { data: null, state: "unreadable" };
       console.error("[ai] PDF tokenlarini sanab bo‘lmadi:", error);
       throw new AuthError("ai_failed");
     }
     if (pdfTokens.size >= 500) pdfTokens.clear();
     pdfTokens.set(key, tokens);
   }
-  return tokens <= AI_LIMITS.maxPdfTokens ? data : null;
+  return tokens <= AI_LIMITS.maxPdfTokens ? { data, state: "attached" } : { data: null, state: "too_large" };
 }
 
 const today = sql`date_trunc('day', now() at time zone 'Asia/Tashkent') at time zone 'Asia/Tashkent'`;
@@ -78,16 +84,23 @@ async function reserve(userId: string, articleId: number) {
   });
 }
 
-type PdfState = "attached" | "too_large" | "none";
-
 function formBlock(draft: AiDraft, pdf: PdfState) {
+  const missing = [
+    pdf === "none" && "the PDF file",
+    !draft.hasProfile && "the teacher's profile (on the Profil page)",
+  ].filter(Boolean);
+  const todo = `\nStill missing before submission: ${missing.length ? missing.join("; ") : "nothing besides the form fields"}.`;
   const note = {
     attached: "",
     too_large:
       "\nThe teacher uploaded a PDF, but it is too large to attach. If you need the article, ask the teacher to paste its title, abstract and main text into the chat.",
+    unreadable:
+      "\nThe teacher uploaded a PDF, but it could not be opened (it may be damaged or password-protected). If you need the article, ask the teacher to paste its text into the chat or upload another PDF.",
     none: "\nNo PDF is uploaded yet.",
   }[pdf];
-  return `<current_form>\n${JSON.stringify(draft, null, 2)}\n</current_form>${note}`;
+  // Holat belgilari formaning o‘zi emas — ular "Still missing" qatorida
+  const form = JSON.stringify(draft, (k, v) => (k === "hasProfile" ? undefined : v), 2);
+  return `<current_form>\n${form}\n</current_form>${note}${todo}`;
 }
 
 /**
@@ -143,6 +156,7 @@ async function converse(
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const stream = (run.stream = client.beta.messages.stream({ ...params, messages }, { signal }));
     let field = "";
+    let json = "";
     let roundText = false;
     stream.on("streamEvent", (event) => {
       if (event.type !== "content_block_start") return;
@@ -150,7 +164,7 @@ async function converse(
       if (type === "thinking" || type === "redacted_thinking") send({ t: "status", v: "thinking" });
       else if (type === "text") send({ t: "status", v: "writing" });
       else if (type === "tool_use") {
-        field = "";
+        field = json = "";
         send({ t: "status", v: "filling" });
       }
     });
@@ -160,9 +174,11 @@ async function converse(
       roundText = wroteText = true;
       send({ t: "text", v: delta });
     });
-    // Qaysi maydon yozilayotgani: taklif kelguncha o‘qituvchi jarayonni ko‘rib turadi
-    stream.on("inputJson", (_delta, snapshot) => {
-      const last = snapshot && typeof snapshot === "object" ? Object.keys(snapshot).at(-1) : undefined;
+    // Qaysi maydon yozilayotgani: taklif kelguncha o‘qituvchi jarayonni ko‘rib turadi. Xom JSON’dan olinadi —
+    // SDK’ning qisman tahlili tugamagan satrni (yozilayotgan maydonni) tashlab yuboradi
+    stream.on("inputJson", (delta) => {
+      json += delta;
+      const last = [...json.matchAll(FIELD_KEY)].at(-1)?.[1];
       if (last && last !== field) send({ t: "field", v: (field = last) });
     });
 
@@ -174,18 +190,28 @@ async function converse(
       return { status: "refusal", proposed: 0 };
     }
     if (message.stop_reason === "max_tokens") {
-      send({ t: "error", message: "Javob juda uzun bo‘lib, kesilib qoldi. So‘rovni qismlarga bo‘lib yuboring." });
+      send({ t: "error", message: "Javob juda uzun bo‘lib, kesilib qoldi. Avval bitta tilni to‘ldirishni so‘rang." });
       return { status: "truncated", proposed: 0 };
     }
 
     const results: BetaToolResultBlockParam[] = [];
-    for (const block of message.content) {
+    // Zaxira modelga o‘tilgan bo‘lsa, rad etilgan urinishning chala chaqiruvlari hisobga olinmaydi
+    const start = message.content.findLastIndex((b) => b.type === "fallback") + 1;
+    for (const block of message.content.slice(start)) {
       if (block.type !== "tool_use") continue;
       // eager_input_streaming’da server kirishni tekshirmaydi: sxemaga mos kelmasa, model qayta yozadi
       const parsed = block.name === PROPOSE_TOOL.name ? toolInputSchema.safeParse(block.input) : null;
       if (parsed?.success) {
         Object.assign(merged, parsed.data);
-        results.push({ type: "tool_result", tool_use_id: block.id, content: "Applied to the form." });
+        // Model natijani bilsin: kesilgan yoki qo‘llanmagan maydonni keyingi qadamda to‘g‘rilab yuboradi
+        const { notes } = normalizeProposal(parsed.data, draft);
+        results.push({
+          type: "tool_result",
+          tool_use_id: block.id,
+          content: notes.length
+            ? `Applied with problems:\n${notes.map((n) => `- ${n}`).join("\n")}\nSend corrected values for these fields.`
+            : "Applied to the form.",
+        });
       } else {
         results.push({
           type: "tool_result",
@@ -195,22 +221,27 @@ async function converse(
         });
       }
     }
-    // Shu paytgacha yig‘ilgan taklif darhol yuboriladi: model yakuniy xulosani yozguncha forma to‘lib turadi
+    // Shu paytgacha yig‘ilgan taklif darhol yuboriladi: model yakuniy xabarini yozguncha forma to‘lib turadi
     if (results.some((r) => !r.is_error)) {
       const { proposal, dropped } = normalizeProposal(merged, draft);
-      send({ t: "proposal", v: proposal, dropped });
       proposed = Object.keys(proposal).length;
+      if (proposed) send({ t: "proposal", v: proposal, dropped });
     }
     // Zaxira modelga o‘tilgan javobni qayta yuborish alohida qoidalarga bo‘ysunadi — shu yerda to‘xtaymiz
     if (message.stop_reason !== "tool_use" || message.content.some((b) => b.type === "fallback")) break;
+    if (round === MAX_ROUNDS - 1) {
+      send({ t: "error", message: "AI javobni oxirigacha yozib ulgurmadi. Formadagi o‘zgarishlarni tekshiring." });
+      return { status: "ok", proposed, error: "max_rounds" };
+    }
     messages.push({ role: "assistant", content: message.content }, { role: "user", content: results });
   }
   return { status: "ok", proposed };
 }
 
 function failed(error: unknown, run: Run, send: (e: AiEvent) => void, timedOut: boolean): Result {
-  // Uzilgan qadamning shu paytgacha ishlatgan tokenlari ham hisobga kiradi
+  // Uzilgan qadamning shu paytgacha ishlatgan tokenlari ham hisobga kiradi; oqim ortiqcha o‘qilmasin
   addUsage(run.usage, run.stream?.currentMessage?.usage);
+  run.stream?.abort();
   if (error instanceof Anthropic.APIUserAbortError && !timedOut) return { status: "aborted", proposed: 0 };
 
   let code = "internal";
@@ -272,15 +303,14 @@ export async function startAssistant(userId: string, articleId: number, input: A
   const { id, remaining } = await reserve(userId, articleId);
   const started = Date.now();
   const run: Run = { usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, stream: null, withPdf: false };
-  let pdf: string | null = null;
+  let pdf: { data: string | null; state: PdfState } = { data: null, state: "none" };
   try {
-    pdf = own.article.pdfKey ? await loadPdf(client, own.article.pdfKey) : null;
+    if (own.article.pdfKey) pdf = await loadPdf(client, own.article.pdfKey);
   } catch (error) {
     await record(id, { status: "error", proposed: 0, error: "pdf" }, run, Date.now() - started);
     throw error;
   }
-  run.withPdf = pdf !== null;
-  const pdfState: PdfState = pdf ? "attached" : own.article.pdfKey ? "too_large" : "none";
+  run.withPdf = pdf.data !== null;
   // Mijoz uzilsa yoki so‘rov juda cho‘zilsa model to‘xtatiladi
   const deadline = AbortSignal.timeout(AI_LIMITS.maxDurationMs);
   const abort = AbortSignal.any([signal, deadline]);
@@ -315,7 +345,7 @@ export async function startAssistant(userId: string, articleId: number, input: A
             tools: [PROPOSE_TOOL],
             metadata: { user_id: userId },
           },
-          buildMessages(input, pdf, pdfState),
+          buildMessages(input, pdf.data, pdf.state),
           input.draft,
           abort,
           run,

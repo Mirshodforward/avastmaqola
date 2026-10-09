@@ -62,6 +62,12 @@
 html {
   scroll-padding-bottom: 8rem;
 }
+/* Telefonda panel ikki qatorga tushadi */
+@media (max-width: 639px) {
+  html {
+    scroll-padding-bottom: 11rem;
+  }
+}
 
 /* Bosh sahifa belgisi: ufqdan ko‘tarilish, keyin sekin suzish. Faqat transform/opacity/clip-path — sahifa siljimaydi (CLS 0) */
 @keyframes asman-rise {
@@ -98,6 +104,24 @@ html {
   .asman-rise,
   .asman-horizon {
     animation: none;
+  }
+}
+
+/* Bosh sahifa bo‘limlari scroll bilan ko‘rinishga kirib keladi. Faqat scroll-driven animatsiyani biladigan
+   brauzerlarda va harakat cheklanmagan bo‘lsa; aks holda bo‘lim darhol ko‘rinadi (mazmun hech qachon yashirin qolmaydi) */
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(2rem);
+  }
+}
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal {
+      animation: reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 35%;
+    }
   }
 }
 

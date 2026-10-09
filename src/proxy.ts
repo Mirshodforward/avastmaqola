@@ -45,5 +45,5 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   // Faqat sessiya kerak bo‘lgan yo‘llar. Ommaviy (keshlanadigan) sahifalar sessiyani o‘qimaydi — ularga token yozilmaydi
-  matcher: ["/dashboard/:path*", "/admin/:path*", "/api/:path*", "/login", "/register"],
+  matcher: ["/dashboard/:path*", "/admin/:path*", "/moderator/:path*", "/api/:path*", "/login", "/register"],
 };

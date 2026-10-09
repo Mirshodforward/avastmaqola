@@ -33,7 +33,6 @@ const DEMO = [
     profile: {
       position: "Dotsent",
       degree: "phd",
-      title: "dotsent",
       department: "Axborot texnologiyalari kafedrasi",
       direction: "Kompyuter lingvistikasi",
       bio: "O‘zbek tilini kompyuterda qayta ishlash, matn tasnifi va mashinaviy tarjima bo‘yicha tadqiqotlar olib boradi.",
@@ -63,7 +62,6 @@ const DEMO = [
     profile: {
       position: "Katta o‘qituvchi",
       degree: null,
-      title: null,
       department: "Pedagogika va psixologiya kafedrasi",
       direction: "Ta’lim texnologiyalari",
       bio: "Raqamli ta’lim platformalari va moslashuvchan o‘qitish usullarini o‘rganadi.",
@@ -93,7 +91,6 @@ const DEMO = [
     profile: {
       position: "Professor",
       degree: "dsc",
-      title: "professor",
       department: "Agronomiya kafedrasi",
       direction: "Qishloq xo‘jaligi va suv resurslari",
       bio: "Suv tejovchi sug‘orish texnologiyalari va sho‘rlangan yerlarda dehqonchilik bo‘yicha 20 yildan ortiq tadqiqot tajribasiga ega.",
@@ -126,7 +123,6 @@ const DEMO = [
     profile: {
       position: "O‘qituvchi",
       degree: null,
-      title: null,
       department: "Tarix va madaniy meros kafedrasi",
       direction: "Madaniy merosni raqamlashtirish",
       bio: "Me’moriy yodgorliklarni fotogrammetriya va 3D texnologiyalar yordamida hujjatlashtirish bilan shug‘ullanadi.",
@@ -236,9 +232,9 @@ try {
         [user.firstName, user.lastName, user.phone],
       );
       await db.query(
-        `insert into profiles (user_id, slug, position, academic_degree, academic_title, institution, department, direction, bio, keywords)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-        [u.id, user.slug, profile.position, profile.degree, profile.title, UNI, profile.department, profile.direction, profile.bio, profile.keywords],
+        `insert into profiles (user_id, slug, position, academic_degree, institution, department, direction, bio, keywords)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [u.id, user.slug, profile.position, profile.degree, UNI, profile.department, profile.direction, profile.bio, profile.keywords],
       );
       const pdf = demoPdf(item);
       const pdfKey = `demo-${randomBytes(8).toString("hex")}.pdf`;

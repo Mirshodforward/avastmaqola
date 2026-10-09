@@ -5,12 +5,14 @@ import { Suspense } from "react";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { formatNumber } from "@/components/admin/format";
 import { Pagination, withParams } from "@/components/admin/pagination";
-import { TableFrame, td, th } from "@/components/admin/table";
+import { ReviewDrawer } from "@/components/admin/review-drawer";
+import { TableFrame } from "@/components/admin/table";
 import { StatusChip } from "@/components/article/status-chip";
 import { DashboardSkeleton } from "@/components/dashboard/shell";
 import { STATUS_LABELS } from "@/lib/article-rules";
 import { formatDate } from "@/lib/format";
 import { LISTED_STATUSES, listArticles, parseArticleFilters } from "@/server/admin/articles";
+import { textParam } from "@/server/admin/params";
 import { requireAdminPage } from "@/server/auth/session";
 
 type Props = PageProps<"/admin/articles">;
@@ -25,75 +27,90 @@ export default function AdminArticlesPage({ searchParams }: Props) {
   );
 }
 
+const th = "whitespace-nowrap border-b border-line bg-mist px-5 py-3 text-sm font-medium text-muted";
+const td = "border-b border-line px-5 py-4 align-middle";
+
 async function Articles({ searchParams }: Pick<Props, "searchParams">) {
   await requireAdminPage();
-  const filters = parseArticleFilters(await searchParams);
+  const params = await searchParams;
+  const filters = parseArticleFilters(params);
   const { items, total, counts, page, pages } = await listArticles(filters);
-  const filtered = Boolean(filters.status || filters.q);
-  const href = (p: number) =>
-    withParams("/admin/articles", { status: filters.status, q: filters.q, page: p > 1 ? p : null });
+  // Joriy ro‘yxat manzili: panel ochilsa ham, yopilsa ham filtr va sahifa saqlanadi
+  const listHref = (extra: Record<string, string | number | null> = {}) =>
+    withParams("/admin/articles", { status: filters.status, q: filters.q, page: page > 1 ? page : null, ...extra });
+  const tabs = [
+    { status: null, label: "Hammasi", count: counts.submitted + counts.published + counts.rejected },
+    ...LISTED_STATUSES.map((s) => ({ status: s, label: STATUS_LABELS[s], count: counts[s] })),
+  ];
 
   return (
     <AdminShell
       current="articles"
       title="Maqolalar"
-      lead={`Ko‘rib chiqishga yuborilgan, chop etilgan va tuzatishga qaytarilgan maqolalar. Qoralamalar faqat muallifga ko‘rinadi (hozir ${formatNumber(counts.draft)} ta).`}
+      lead={`Yuborilgan, chop etilgan va bekor qilingan maqolalar. «Ko‘rish» maqolani yon panelda ochadi — u yerda chop etish yoki izoh bilan bekor qilish mumkin. Qoralamalar faqat muallifga ko‘rinadi (hozir ${formatNumber(counts.draft)} ta).`}
     >
-      {/* key: filtr o‘zgarganda (masalan, "Tozalash") maydonlar URL’dagi qiymat bilan qayta chiziladi */}
+      <nav aria-label="Holat bo‘yicha" className="mt-8 flex flex-wrap gap-2">
+        {tabs.map((t) => {
+          const active = filters.status === t.status;
+          return (
+            <Link
+              key={t.label}
+              href={withParams("/admin/articles", { status: t.status, q: filters.q })}
+              aria-current={active ? "true" : undefined}
+              className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-base font-medium ${
+                active ? "border-lapis bg-lapis text-on-lapis" : "border-line bg-paper hover:border-lapis"
+              }`}
+            >
+              {t.label}
+              <span className={`tabular-nums ${active ? "" : "text-muted"}`}>{formatNumber(t.count)}</span>
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* key: filtr o‘zgarganda (masalan, "Tozalash") maydon URL’dagi qiymat bilan qayta chiziladi */}
       <Form
         key={`${filters.status}|${filters.q}`}
         action="/admin/articles"
         role="search"
         aria-label="Maqolalarni qidirish"
-        className="mt-6 flex flex-wrap items-end gap-3"
+        className="mt-5 flex flex-wrap items-center gap-3"
       >
-        <label className="grid w-full gap-1.5 text-sm font-medium sm:w-80">
+        {filters.status && <input type="hidden" name="status" value={filters.status} />}
+        <label className="sr-only" htmlFor="admin-articles-q">
           Qidirish
-          <input
-            type="search"
-            name="q"
-            defaultValue={filters.q}
-            maxLength={100}
-            placeholder="Sarlavha, muallif yoki №"
-            className="input font-normal"
-          />
         </label>
-        <label className="grid gap-1.5 text-sm font-medium">
-          Holat
-          <select name="status" defaultValue={filters.status ?? ""} className="input font-normal">
-            <option value="">Hammasi ({formatNumber(counts.submitted + counts.published + counts.rejected)})</option>
-            {LISTED_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {STATUS_LABELS[s]} ({formatNumber(counts[s])})
-              </option>
-            ))}
-          </select>
-        </label>
-        <button type="submit" className="btn btn-primary py-3">
-          Ko‘rsatish
+        <input
+          id="admin-articles-q"
+          type="search"
+          name="q"
+          defaultValue={filters.q}
+          maxLength={100}
+          placeholder="Sarlavha, muallif yoki № bo‘yicha qidirish"
+          className="input w-full sm:w-[28rem]"
+        />
+        <button type="submit" className="btn btn-primary">
+          Qidirish
         </button>
-        {filtered && (
-          <Link href="/admin/articles" className="btn btn-ghost">
+        {filters.q && (
+          <Link href={withParams("/admin/articles", { status: filters.status })} className="btn btn-ghost">
             Tozalash
           </Link>
         )}
       </Form>
 
       <p className="mt-6 text-sm text-muted">
-        {filtered ? "Topildi" : "Jami"}: {formatNumber(total)} ta maqola
+        {filters.q ? "Topildi" : "Jami"}: {formatNumber(total)} ta maqola
       </p>
       {items.length ? (
-        <TableFrame label="Maqolalar ro‘yxati" minWidth="min-w-[52rem]">
+        <TableFrame label="Maqolalar ro‘yxati" minWidth="min-w-[56rem]">
           <thead>
             <tr>
               <th scope="col" className={th}>
                 №
               </th>
               <th scope="col" className={th}>
-                Sarlavha
-              </th>
-              <th scope="col" className={th}>
-                Muallif
+                Maqola
               </th>
               <th scope="col" className={th}>
                 Holat
@@ -104,33 +121,46 @@ async function Articles({ searchParams }: Pick<Props, "searchParams">) {
               <th scope="col" className={th}>
                 Chop etilgan
               </th>
+              <th scope="col" className={th}>
+                <span className="sr-only">Amal</span>
+              </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="text-base">
             {items.map((a) => (
-              <tr key={a.id}>
+              // Qatorning istalgan joyini bosish «Ko‘rish»ni ochadi (klaviaturada esa bitta tugma)
+              <tr key={a.id} className="relative hover:bg-mist/60">
                 <td className={`${td} tabular-nums text-muted`}>{a.id}</td>
-                <td className={`${td} min-w-72`}>
-                  <Link href={`/admin/articles/${a.id}`} className="font-medium hover:text-lapis">
-                    {a.title}
-                  </Link>
+                <td className={`${td} min-w-80`}>
+                  <p className="font-medium leading-snug">{a.title}</p>
+                  <p className="mt-0.5 text-sm text-muted">{a.author}</p>
                 </td>
-                <td className={`${td} whitespace-nowrap`}>{a.author}</td>
                 <td className={td}>
                   <StatusChip status={a.status} />
                 </td>
-                <td className={`${td} whitespace-nowrap`}>{a.submittedAt ? formatDate(a.submittedAt) : "—"}</td>
-                <td className={`${td} whitespace-nowrap`}>{a.publishedAt ? formatDate(a.publishedAt) : "—"}</td>
+                <td className={`${td} whitespace-nowrap text-sm`}>{a.submittedAt ? formatDate(a.submittedAt) : "—"}</td>
+                <td className={`${td} whitespace-nowrap text-sm`}>{a.publishedAt ? formatDate(a.publishedAt) : "—"}</td>
+                <td className={`${td} text-right`}>
+                  <Link
+                    href={listHref({ view: a.id })}
+                    scroll={false}
+                    aria-label={`Ko‘rish: №${a.id}. ${a.title}`}
+                    className="btn btn-secondary after:absolute after:inset-0"
+                  >
+                    Ko‘rish
+                  </Link>
+                </td>
               </tr>
             ))}
           </tbody>
         </TableFrame>
       ) : (
         <p className="mt-4 rounded-xl border border-line bg-paper p-5 text-muted">
-          {filtered ? "Bu shartlarga mos maqola topilmadi." : "Hali ko‘rib chiqishga yuborilgan maqola yo‘q."}
+          {filters.status || filters.q ? "Bu shartlarga mos maqola topilmadi." : "Hali ko‘rib chiqishga yuborilgan maqola yo‘q."}
         </p>
       )}
-      <Pagination page={page} pages={pages} href={href} />
+      <Pagination page={page} pages={pages} href={(p) => listHref({ page: p > 1 ? p : null })} />
+      <ReviewDrawer view={textParam(params, "view") || null} closeHref={listHref()} />
     </AdminShell>
   );
 }

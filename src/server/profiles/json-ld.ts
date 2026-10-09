@@ -22,14 +22,11 @@ export function personJsonLd(p: PublicProfile) {
   const sameAs = compact([
     orcid && `https://orcid.org/${orcid}`,
     p.googleScholarUrl,
-    p.researchgateUrl,
     p.scopusAuthorId && `https://www.scopus.com/authid/detail.uri?authorId=${p.scopusAuthorId}`,
-    p.websiteUrl,
   ]);
   const identifier = compact([
     orcid && { "@type": "PropertyValue", propertyID: "ORCID", value: orcid },
     p.scopusAuthorId && { "@type": "PropertyValue", propertyID: "Scopus Author ID", value: p.scopusAuthorId },
-    p.researcherId && { "@type": "PropertyValue", propertyID: "ResearcherID", value: p.researcherId },
   ]);
   const honorific = p.academicDegree ? HONORIFIC[p.academicDegree] : undefined;
 
@@ -41,7 +38,6 @@ export function personJsonLd(p: PublicProfile) {
     givenName: p.firstName,
     familyName: p.lastName,
     ...(p.patronymic ? { additionalName: p.patronymic } : {}),
-    ...(p.publishedName ? { alternateName: p.publishedName } : {}),
     ...(honorific ? { honorificSuffix: honorific } : {}),
     jobTitle: p.position,
     worksFor: { "@type": "CollegeOrUniversity", name: p.institution },

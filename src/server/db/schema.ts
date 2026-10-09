@@ -10,18 +10,22 @@ import {
   smallint,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 // Nisbiy import: bu fayl drizzle-kit tomonidan ham o‘qiladi, u "@/" aliasini bilmaydi
-import { ARTICLE_STATUSES, LICENSES, type ArticleStatus, type License } from "../../lib/article-rules";
+import {
+  ARTICLE_STATUSES,
+  LICENSES,
+  VENUE_TYPES,
+  type ArticleStatus,
+  type License,
+  type VenueType,
+} from "../../lib/article-rules";
 import { UNIVERSITY_NAME } from "../../lib/brand";
 import { LANGS, type Lang } from "../../lib/langs";
-import {
-  ACADEMIC_DEGREES,
-  ACADEMIC_TITLES,
-  type AcademicDegree,
-  type AcademicTitle,
-} from "../../lib/profile-labels";
+import { ACADEMIC_DEGREES, type AcademicDegree } from "../../lib/profile-labels";
+import { RATING_STATUSES, type RatingStatus } from "../../lib/rating-rules";
 
 const sqlList = (values: readonly string[]) => sql.raw(values.map((v) => `'${v}'`).join(", "));
 
@@ -62,7 +66,7 @@ export const users = pgTable(
       "users_orcid_format",
       sql`${t.orcid} ~ '^[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{3}[0-9X]$'`,
     ),
-    check("users_role_valid", sql`${t.role} in ('teacher', 'admin')`),
+    check("users_role_valid", sql`${t.role} in ('teacher', 'moderator', 'admin')`),
   ],
 );
 
@@ -147,10 +151,8 @@ export const profiles = pgTable(
     // /oqituvchi/{slug}. Bir marta yaratiladi va o‘zgarmaydi: barqaror URL Scholar va AI uchun muhim
     slug: text("slug").notNull().unique(),
     patronymic: text("patronymic"),
-    publishedName: text("published_name"), // ilmiy nashrlardagi ism, masalan "M. A. Qahramonov"
     position: text("position").notNull(), // lavozim
     academicDegree: text("academic_degree").$type<AcademicDegree>(),
-    academicTitle: text("academic_title").$type<AcademicTitle>(),
     institution: text("institution").notNull().default(UNIVERSITY_NAME),
     department: text("department"), // fakultet / kafedra
     direction: text("direction").notNull(), // ilmiy yo‘nalish
@@ -158,10 +160,6 @@ export const profiles = pgTable(
     keywords: text("keywords").array().notNull().default(sql`'{}'::text[]`),
     googleScholarUrl: text("google_scholar_url"),
     scopusAuthorId: text("scopus_author_id"),
-    researcherId: text("researcher_id"), // Web of Science ResearcherID
-    researchgateUrl: text("researchgate_url"),
-    websiteUrl: text("website_url"),
-    publicEmail: text("public_email"),
     photoKey: text("photo_key"), // storage/avatars/{photoKey}-{512|128}.webp
     isPublic: boolean("is_public").notNull().default(true),
     createdAt: createdAt(),
@@ -173,7 +171,6 @@ export const profiles = pgTable(
   (t) => [
     check("profiles_slug_format", sql`${t.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`),
     check("profiles_degree_valid", sql`${t.academicDegree} in (${sqlList(ACADEMIC_DEGREES)})`),
-    check("profiles_title_valid", sql`${t.academicTitle} in (${sqlList(ACADEMIC_TITLES)})`),
   ],
 );
 
@@ -203,6 +200,18 @@ export const articles = pgTable(
     rightsConfirmedAt: timestamp("rights_confirmed_at", { withTimezone: true }),
     pdfKey: text("pdf_key"), // storage/articles/{pdfKey}
     pdfBytes: integer("pdf_bytes"),
+    // Nashr ma’lumotlari (ixtiyoriy): maqola jurnal yoki konferensiya to‘plamida allaqachon chiqqan bo‘lsa
+    venueType: text("venue_type").$type<VenueType>(),
+    venue: text("venue"),
+    volume: text("volume"),
+    issue: text("issue"),
+    pages: text("pages"), // "125–128" yoki maqola raqami
+    pubYear: smallint("pub_year"),
+    doi: text("doi"), // 10.1117/12.3110012 (https://doi.org/ prefiksisiz)
+    // Portaldagi joyi: "3-son, 12-maqola". O‘qituvchi yozadi, moderator yoki admin chop etishda tasdiqlaydi yoki
+    // o‘zgartiradi. Yuqoridagi `issue` — boshqa (tashqi) jurnalning soni, bu emas
+    issueNo: smallint("issue_no").notNull().default(1),
+    issueSeq: smallint("issue_seq"),
     reviewNote: text("review_note"), // administrator izohi (rad etilganda o‘qituvchiga ko‘rinadi)
     submittedAt: timestamp("submitted_at", { withTimezone: true }),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
@@ -219,6 +228,9 @@ export const articles = pgTable(
     check("articles_status_valid", sql`${t.status} in (${sqlList(ARTICLE_STATUSES)})`),
     check("articles_lang_valid", sql`${t.lang} in (${sqlList(LANGS)})`),
     check("articles_license_valid", sql`${t.license} in (${sqlList(LICENSES)})`),
+    check("articles_venue_type_valid", sql`${t.venueType} in (${sqlList(VENUE_TYPES)})`),
+    check("articles_pub_year_valid", sql`${t.pubYear} between 1900 and 2100`),
+    check("articles_doi_format", sql`${t.doi} ~ '^10[.][0-9]{4,9}/[^[:space:]]+$'`),
     // Ilova xato qilsa ham chala maqola yuborilmaydi yoki chop etilmaydi
     check(
       "articles_complete_unless_editable",
@@ -229,6 +241,10 @@ export const articles = pgTable(
         and cardinality(${t.keywordsUz}) > 0 and cardinality(${t.keywordsRu}) > 0 and cardinality(${t.keywordsEn}) > 0)`,
     ),
     check("articles_published_has_date", sql`${t.status} <> 'published' or ${t.publishedAt} is not null`),
+    check("articles_issue_no_valid", sql`${t.issueNo} between 1 and 999`),
+    check("articles_issue_seq_valid", sql`${t.issueSeq} between 1 and 999`),
+    // Bir joyda faqat bitta chop etilgan maqola. Qoralama va navbatdagilar bir xil joyni taklif qilishi mumkin
+    uniqueIndex("articles_issue_slot_uq").on(t.issueNo, t.issueSeq).where(sql`${t.status} = 'published'`),
   ],
 );
 
@@ -293,6 +309,106 @@ export const aiRequests = pgTable(
       "ai_requests_status_valid",
       sql`${t.status} in ('running', 'ok', 'refusal', 'truncated', 'aborted', 'error')`,
     ),
+  ],
+);
+
+export type ZenodoStatus = "in_progress" | "published" | "failed";
+export type ZenodoErrorCode =
+  | "grant" // kod tokenga almashmadi
+  | "account_taken" // bu Zenodo akkaunti boshqa o‘qituvchiniki
+  | "unavailable" // tarmoq, timeout yoki 5xx
+  | "rate_limited"
+  | "rejected" // Zenodo ma’lumotni qabul qilmadi
+  | "blocked" // spam filtri yoki IP bloki
+  | "config" // JSON’siz 4xx yoki noto‘g‘ri client: sozlama xatosi
+  | "file" // yuklangan PDF’ning md5’i mos emas
+  | "article_changed"
+  | "internal";
+
+/**
+ * Maqolaning Zenodo’dagi nusxasi. Kalit (maqola, Zenodo serveri): bitta serverda bitta yozuv — ikkinchi DOI chiqmaydi;
+ * sandbox va production qatorlari bir-biriga xalaqit bermaydi. Zenodo kaliti (token) hech qayerda saqlanmaydi.
+ */
+export const zenodoDeposits = pgTable(
+  "zenodo_deposits",
+  {
+    articleId: integer("article_id")
+      .notNull()
+      .references(() => articles.id, { onDelete: "cascade" }),
+    host: text("host").notNull(), // zenodo.org | sandbox.zenodo.org | 127.0.0.1:4010 (test)
+    status: text("status").$type<ZenodoStatus>().notNull(),
+    // Qoralama qaysi Zenodo akkauntida: bitta akkaunt — bitta o‘qituvchi (DOI fabrikasi bo‘lmasin)
+    zenodoUserId: text("zenodo_user_id"),
+    // Qoralama yaratilishi bilan yoziladi: qayta urinishda chop etilganini topib olish yoki o‘chirish uchun
+    recordId: text("record_id"),
+    doi: text("doi"), // Zenodo bergan DOI (articles.doi — nashriyot DOI’si, unga tegilmaydi)
+    error: text("error").$type<ZenodoErrorCode>(), // qisqa xato kodi
+    errorDetail: text("error_detail"), // Zenodo xabari, ko‘pi bilan 300 belgi (tokensiz)
+    // Baza soati bilan (render Date.now() o‘qimaydi): 10 daqiqadan eski in_progress — uzilgan urinish
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.articleId, t.host] }),
+    check("zenodo_deposits_status_valid", sql`${t.status} in ('in_progress', 'published', 'failed')`),
+    check("zenodo_deposits_doi_format", sql`${t.doi} ~ '^10[.][0-9]{4,9}/[^[:space:]]+$'`),
+    check(
+      "zenodo_deposits_published_complete",
+      sql`${t.status} <> 'published' or (${t.doi} is not null and ${t.recordId} is not null)`,
+    ),
+  ],
+);
+
+/** Portal yangiliklari: admin yozadi. URL: /yangiliklar/{id}. publishedAt bo‘lmasa — qoralama, saytda ko‘rinmaydi. */
+export const news = pgTable(
+  "news",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    title: text("title").notNull().default(""),
+    body: text("body").notNull().default(""), // oddiy matn, xatboshilar bo‘sh qator bilan
+    imageKey: text("image_key"), // storage/news/{imageKey}.webp
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("news_published_at_idx").on(t.publishedAt),
+    // Ilova xato qilsa ham sarlavhasiz yoki matnsiz yangilik chop etilmaydi
+    check("news_complete_if_published", sql`${t.publishedAt} is null or (btrim(${t.title}) <> '' and btrim(${t.body}) <> '')`),
+  ],
+);
+
+/**
+ * Ro‘yxatdan o‘tgan foydalanuvchining maqolaga bahosi (1–5 yulduz) va iqtibosi. Bitta maqolaga bittadan: qayta yuborsa
+ * tahrirlanadi va yana moderatsiyaga tushadi. Ommaga va o‘rtacha bahoga faqat admin tasdiqlagani kiradi.
+ */
+export const articleRatings = pgTable(
+  "article_ratings",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    articleId: integer("article_id")
+      .notNull()
+      .references(() => articles.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: text("status").$type<RatingStatus>().notNull().default("pending"),
+    stars: smallint("stars").notNull(),
+    body: text("body").notNull(), // iqtibos matni
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("article_ratings_article_user_idx").on(t.articleId, t.userId),
+    index("article_ratings_status_idx").on(t.status, t.updatedAt),
+    check("article_ratings_status_valid", sql`${t.status} in (${sqlList(RATING_STATUSES)})`),
+    check("article_ratings_stars_valid", sql`${t.stars} between 1 and 5`),
   ],
 );
 

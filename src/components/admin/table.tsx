@@ -1,7 +1,10 @@
 import type { ReactNode } from "react";
 import { formatNumber } from "./format";
 
-/** Tor ekranda jadval o‘z ichida gorizontal suriladi (sahifa emas); hudud klaviatura bilan ham suriladi */
+/**
+ * Tor ekranda jadval o‘z ichida gorizontal suriladi (sahifa emas); hudud klaviatura bilan ham suriladi.
+ * relative: ichidagi absolute elementlar (sr-only matn, qatorni bosiladigan qiladigan qatlam) ham shu yerda kesiladi
+ */
 export function TableFrame({
   label,
   minWidth = "min-w-[40rem]",
@@ -12,7 +15,7 @@ export function TableFrame({
   children: ReactNode;
 }) {
   return (
-    <div role="region" aria-label={label} tabIndex={0} className="mt-4 overflow-x-auto rounded-xl border border-line bg-paper">
+    <div role="region" aria-label={label} tabIndex={0} className="relative mt-4 overflow-x-auto rounded-xl border border-line bg-paper">
       <table className={`w-full ${minWidth} text-left text-sm [&_tbody_tr:last-child>*]:border-b-0`}>
         <caption className="sr-only">{label}</caption>
         {children}

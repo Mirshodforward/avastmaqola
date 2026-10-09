@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { connection } from "next/server";
 import { and, eq, gt, sql } from "drizzle-orm";
 import { db } from "../db";
 import { sessions, users } from "../db/schema";
@@ -65,17 +66,45 @@ export async function requireApiUser(): Promise<SessionUser> {
   return user;
 }
 
-export async function requireApiAdmin(): Promise<SessionUser> {
+/**
+ * VAQTINCHA (2026-10-09, loyiha egasining so‘rovi): admin va moderator panellari loginsiz ochiq, haqiqiy kirish
+ * keyin o‘rnatiladi. Faqat `next dev`da — production build’da NODE_ENV=production, panellar yana faqat o‘z rollariga.
+ */
+export const ADMIN_OPEN = process.env.NODE_ENV === "development";
+
+/** Maqolalarni ko‘rib chiqish va chop etish huquqi: moderator va admin */
+export const canReview = (role: string | undefined) => role === "moderator" || role === "admin";
+
+export async function requireApiModerator(): Promise<void> {
+  if (ADMIN_OPEN) return;
+  const user = await requireApiUser();
+  if (!canReview(user.role)) throw new AuthError("forbidden");
+}
+
+/** Moderator panel: moderator va admin, boshqalarga 404 */
+export async function requireModeratorPage(): Promise<void> {
+  if (ADMIN_OPEN) {
+    await connection();
+    return;
+  }
+  const user = await requireUser();
+  if (!canReview(user.role)) notFound();
+}
+
+export async function requireApiAdmin(): Promise<void> {
+  if (ADMIN_OPEN) return;
   const user = await requireApiUser();
   if (user.role !== "admin") throw new AuthError("forbidden");
-  return user;
 }
 
 /** Admin sahifalari: boshqalarga 404 — bo‘lim borligini ham oshkor qilmaymiz. */
-export async function requireAdminPage(): Promise<SessionUser> {
+export async function requireAdminPage(): Promise<void> {
+  if (ADMIN_OPEN) {
+    await connection(); // production’dagidek har so‘rovda yangi ma’lumot bilan chiziladi
+    return;
+  }
   const user = await requireUser();
   if (user.role !== "admin") notFound();
-  return user;
 }
 
 /** Himoyalangan sahifalar uchun: sessiya bo‘lmasa /login’ga yo‘naltiradi. */

@@ -42,7 +42,7 @@ async function Overview() {
           label="O‘qituvchilar"
           href="/admin/teachers"
           value={formatNumber(people.total)}
-          detail={`+${formatNumber(people.new30)} so‘nggi 30 kunda${people.admins ? ` · shundan ${formatNumber(people.admins)} admin` : ""}`}
+          detail={`+${formatNumber(people.new30)} so‘nggi 30 kunda${people.admins ? ` · adminlar: ${formatNumber(people.admins)}` : ""}`}
         />
         <Stat
           label="Profil to‘ldirgan"
@@ -62,7 +62,7 @@ async function Overview() {
         <Stat
           label="Shu oy chop etilgan"
           value={formatNumber(articles.publishedThisMonth)}
-          detail={`${monthLabel(thisMonth, true)} · jami: ${formatNumber(articles.published)}`}
+          detail={`${monthLabel(thisMonth, true)} · hozir saytda: ${formatNumber(articles.published)}`}
         />
         <Stat
           label="Faol sessiyalar"
@@ -70,9 +70,9 @@ async function Overview() {
           detail={`${formatNumber(sessions.people)} foydalanuvchi`}
         />
         <Stat
-          label="Kirish urinishlari, 7 kun"
+          label="Kirish va ro‘yxatdan o‘tish, 7 kun"
           value={formatNumber(auth.total)}
-          detail={`${formatNumber(auth.verified)} muvaffaqiyatli · ${formatNumber(auth.failed)} rad etilgan · ${formatNumber(auth.abandoned)} tugallanmagan`}
+          detail={`${formatNumber(auth.verified)} muvaffaqiyatli · ${formatNumber(auth.failed)} muvaffaqiyatsiz · ${formatNumber(auth.abandoned)} muddati o‘tgan`}
         />
         <Stat
           label="AI so‘rovlar bugun"
@@ -124,7 +124,7 @@ async function Overview() {
           />
         </Panel>
 
-        <div className="grid content-start gap-6">
+        <div className="grid min-w-0 content-start gap-6">
           <Panel
             id="waiting-title"
             title="Navbatda kutayotganlar"
@@ -140,7 +140,7 @@ async function Overview() {
                 {queue.map((a) => (
                   <li key={a.id} className="flex items-start justify-between gap-3 py-3">
                     <div className="min-w-0">
-                      <Link href={`/admin/articles/${a.id}`} className="font-medium hover:text-lapis">
+                      <Link href={`/admin/articles/${a.id}`} className="break-words font-medium hover:text-lapis">
                         №{a.id}. {a.title}
                       </Link>
                       <p className="mt-0.5 text-sm text-muted">{a.author}</p>

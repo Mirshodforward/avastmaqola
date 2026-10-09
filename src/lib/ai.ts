@@ -6,11 +6,18 @@ type TextField = `${"title" | "abstract"}${"Uz" | "Ru" | "En"}`;
 type KeywordsField = `keywords${"Uz" | "Ru" | "En"}`;
 
 /** Model taklif qilgan o‘zgarishlar: faqat o‘zgaradigan maydonlar bo‘ladi */
-export type AiProposal = Partial<{ lang: Lang; authors: AuthorInput[] } & Record<TextField, string> & Record<KeywordsField, string[]>>;
+export type AiProposal = Partial<
+  { lang: Lang; authors: AuthorInput[] } & Record<TextField, string> & Record<KeywordsField, string[]>
+>;
 export type AiField = keyof AiProposal;
 
 /** Formaning joriy (saqlanmagan bo‘lishi mumkin) holati — modelga kontekst */
-export type AiDraft = { lang: Lang | ""; authors: AuthorInput[] } & Record<TextField, string> & Record<KeywordsField, string[]>;
+export type AiDraft = {
+  lang: Lang | "";
+  authors: AuthorInput[];
+  hasProfile: boolean;
+} & Record<TextField, string> &
+  Record<KeywordsField, string[]>;
 
 export type AiTurn = { role: "user" | "assistant"; text: string };
 

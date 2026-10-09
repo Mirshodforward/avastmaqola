@@ -4,7 +4,9 @@ const TABS = [
   { key: "overview", href: "/admin", label: "Umumiy" },
   { key: "queue", href: "/admin/queue", label: "Navbat" },
   { key: "articles", href: "/admin/articles", label: "Maqolalar" },
+  { key: "ratings", href: "/admin/iqtiboslar", label: "Iqtiboslar" },
   { key: "teachers", href: "/admin/teachers", label: "O‘qituvchilar" },
+  { key: "news", href: "/admin/yangiliklar", label: "Yangiliklar" },
   { key: "ai", href: "/admin/ai", label: "AI so‘rovlar" },
 ] as const;
 

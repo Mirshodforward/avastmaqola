@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ArticleView } from "@/components/article/article-view";
+import { PublicFooter } from "@/components/public-footer";
 import { PublicHeader } from "@/components/public-header";
+import { RatingSection } from "@/components/rating/rating-section";
 import { JsonLd } from "@/components/seo/json-ld";
 import { SITE_NAME } from "@/lib/brand";
 import { truncate } from "@/lib/format";
@@ -9,6 +11,7 @@ import { avatarUrl } from "@/lib/media";
 import { PLACEHOLDER_ARTICLE_ID, getPublishedArticle } from "@/server/articles/public";
 import { parseArticleId } from "@/server/articles/schemas";
 import { articleJsonLd, articleUrl, citationMeta } from "@/server/articles/seo";
+import { getArticleRatings } from "@/server/ratings/service";
 
 type Props = PageProps<"/maqola/[id]">;
 
@@ -61,14 +64,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function ArticlePage({ params }: Props) {
   const v = await load(params);
   if (!v) notFound();
+  const ratings = await getArticleRatings(v.id);
 
   return (
     <>
       <PublicHeader />
       <main className="w-full flex-1 px-4 py-10 sm:px-6">
-        <ArticleView v={v} absoluteUrl={articleUrl(v.id)} />
+        <ArticleView v={v} absoluteUrl={articleUrl(v.id)} rating={{ avg: ratings.avg, count: ratings.count }} />
+        <RatingSection articleId={v.id} ratings={ratings} />
         <JsonLd data={articleJsonLd(v)} />
       </main>
+      <PublicFooter />
     </>
   );
 }

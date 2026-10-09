@@ -1,10 +1,10 @@
 import "server-only";
-import { and, asc, desc, eq, ne } from "drizzle-orm";
-import { titleIn, type ArticleStatus, type License } from "@/lib/article-rules";
+import { and, asc, desc, eq, like, ne } from "drizzle-orm";
+import { titleIn, type ArticleStatus, type License, type VenueType } from "@/lib/article-rules";
 import type { Lang } from "@/lib/langs";
-import type { AcademicDegree, AcademicTitle } from "@/lib/profile-labels";
+import type { AcademicDegree } from "@/lib/profile-labels";
 import { db } from "../db";
-import { articleAuthors, articles, profiles, users } from "../db/schema";
+import { articleAuthors, articles, profiles, users, zenodoDeposits } from "../db/schema";
 
 /** Ommaviy sahifa, admin ko‘rib chiqishi va o‘qituvchi oldindan ko‘rishi uchun yagona ma’lumot shakli */
 export type ArticleView = {
@@ -17,6 +17,21 @@ export type ArticleView = {
   keywords: Record<Lang, string[]>;
   license: License;
   pdfBytes: number | null;
+  /** Maqola boshqa joyda chop etilgan bo‘lsa: jurnal yoki konferensiya to‘plami, DOI */
+  publication: {
+    type: VenueType | null;
+    venue: string | null;
+    volume: string | null;
+    issue: string | null;
+    pages: string | null;
+    year: number | null;
+    doi: string | null;
+  } | null;
+  /** Zenodo bergan DOI — faqat zenodo.org’niki (10.5281): sinov serverining DOI’si sahifaga chiqmaydi */
+  zenodoDoi?: string | null;
+  /** Portaldagi joyi: "3-son, 12-maqola" (chop etilgunicha — o‘qituvchi taklifi) */
+  issueNo: number;
+  issueSeq: number | null;
   /** Ko‘rib chiqilayotgan nusxa: admin qarori aynan shu yuborishga tegishli bo‘lishi uchun */
   submittedAt: Date | null;
   publishedAt: Date | null;
@@ -33,7 +48,6 @@ export type ArticleView = {
     department: string | null;
     position: string | null;
     academicDegree: AcademicDegree | null;
-    academicTitle: AcademicTitle | null;
     bio: string | null;
   };
   others: { id: number; title: string }[];
@@ -47,7 +61,7 @@ export async function loadArticleView(id: number, publishedOnly: boolean): Promi
     .limit(1);
   if (!a) return null;
 
-  const [authors, [owner], others] = await Promise.all([
+  const [authors, [owner], others, [zenodo]] = await Promise.all([
     db
       .select()
       .from(articleAuthors)
@@ -65,7 +79,6 @@ export async function loadArticleView(id: number, publishedOnly: boolean): Promi
         department: profiles.department,
         position: profiles.position,
         academicDegree: profiles.academicDegree,
-        academicTitle: profiles.academicTitle,
         bio: profiles.bio,
       })
       .from(users)
@@ -78,6 +91,13 @@ export async function loadArticleView(id: number, publishedOnly: boolean): Promi
       .where(and(eq(articles.userId, a.userId), eq(articles.status, "published"), ne(articles.id, id)))
       .orderBy(desc(articles.publishedAt))
       .limit(5),
+    db
+      .select({ doi: zenodoDeposits.doi })
+      .from(zenodoDeposits)
+      .where(
+        and(eq(zenodoDeposits.articleId, id), eq(zenodoDeposits.status, "published"), like(zenodoDeposits.doi, "10.5281/%")),
+      )
+      .limit(1),
   ]);
 
   const me = authors.find((x) => x.userId === a.userId);
@@ -92,6 +112,13 @@ export async function loadArticleView(id: number, publishedOnly: boolean): Promi
     keywords: { uz: a.keywordsUz, ru: a.keywordsRu, en: a.keywordsEn },
     license: a.license,
     pdfBytes: a.pdfKey ? a.pdfBytes : null,
+    publication:
+      a.venue || a.doi
+        ? { type: a.venueType, venue: a.venue, volume: a.volume, issue: a.issue, pages: a.pages, year: a.pubYear, doi: a.doi }
+        : null,
+    zenodoDoi: zenodo?.doi ?? null,
+    issueNo: a.issueNo,
+    issueSeq: a.issueSeq,
     submittedAt: a.submittedAt,
     publishedAt: a.publishedAt,
     updatedAt: a.updatedAt,
@@ -112,7 +139,6 @@ export async function loadArticleView(id: number, publishedOnly: boolean): Promi
       department: visible ? owner.department : null,
       position: visible ? owner.position : null,
       academicDegree: visible ? owner.academicDegree : null,
-      academicTitle: visible ? owner.academicTitle : null,
       bio: visible ? owner.bio : null,
     },
     others: others.map((o) => ({ id: o.id, title: titleIn(o) })),

@@ -1,43 +1,42 @@
 import Link from "next/link";
-import { AsmanMark } from "@/components/asman-mark";
-import { LatestArticles } from "@/components/article/latest-articles";
+import { HomeAuthors } from "@/components/home/authors";
+import { HomeCta } from "@/components/home/cta";
+import { HomeFeatures } from "@/components/home/features";
+import { HOME_WIDTH } from "@/components/home/home-section";
+import { HomeArticles } from "@/components/home/latest-articles";
+import { HomeNews } from "@/components/home/latest-news";
+import { HomeStats } from "@/components/home/stats";
+import { HomeSteps } from "@/components/home/steps";
+import { PublicFooter } from "@/components/public-footer";
+import { PublicNav } from "@/components/public-nav";
 import { SiteJsonLd } from "@/components/seo/site-json-ld";
 import { SiteBrand } from "@/components/site-brand";
-import { SERVICE_NAME, UNIVERSITY_NAME } from "@/lib/brand";
+import { UniversityLogo } from "@/components/university-logo";
+import { UNIVERSITY_NAME } from "@/lib/brand";
 
 export default function HomePage() {
   return (
     <>
       <SiteJsonLd />
 
-      {/* Header va footer balandligi oldindan ma’lum: hero birinchi ekranni aniq to‘ldiradi, maqolalar oqim bilan kelganda ham siljimaydi (CLS) — faqat footer pastga suriladi */}
-      {/* Shart: header/footer kontenti --header-h/--footer-h dan baland bo‘lmasin, aks holda sahifa doim scroll bo‘ladi */}
-      <div className="contents [--footer-h:clamp(3rem,8svh,4rem)] [--header-h:clamp(4.5rem,11svh,5.5rem)] sm:[--footer-h:clamp(4.5rem,9svh,6rem)]">
-        <header className="mx-auto flex min-h-(--header-h) w-[90%] items-center justify-between gap-2">
+      {/* Landing: hero birinchi ekranni to‘liq egallaydi (header balandligi oldindan ma’lum), qolgan bo‘limlar scroll bilan.
+          Ma’lumotli bo‘limlar oqim bilan keladi; ular hero’dan pastda, shuning uchun birinchi ekran siljimaydi (CLS).
+          Hamma blok bitta enda (HOME_WIDTH): keng ekranda chetlarda bo‘sh joy, kontent markazda */}
+      <div className="contents [--header-h:clamp(4.5rem,11svh,5.5rem)]">
+        <header className={`flex min-h-(--header-h) items-center justify-between gap-2 ${HOME_WIDTH}`}>
           <SiteBrand />
-          {/* Ommaviy sahifalar header’i bilan bir xil yo‘llar; 390px’da "Kirish" hero’da bor, header’da faqat sm dan */}
-          <nav aria-label="Asosiy" className="flex items-center gap-2">
-            <Link href="/maqolalar" className="btn btn-ghost px-3">
-              Maqolalar
-            </Link>
-            <Link href="/login" className="btn btn-secondary hidden sm:inline-flex">
-              Kirish
-            </Link>
-            <Link href="/register" className="btn btn-primary hidden sm:inline-flex">
-              Ro‘yxatdan o‘tish
-            </Link>
-          </nav>
+          {/* Ommaviy sahifalar bilan bitta menyu; 390px’da "Kirish" hero’da bor, header’da faqat sm dan */}
+          <PublicNav home />
         </header>
 
         {/* h1 va javob-jumla <main> ichida: ekran o‘quvchi "asosiy kontentga o‘tish"da ularni o‘tkazib yubormaydi */}
         <main className="flex flex-1 flex-col">
           {/* "Asman" — osmon: yuqori qism osmon, bo‘lim chegarasi ufq, belgi shu ufqda turadi */}
           {/* Osmon birinchi ekranni to‘ldiradi: bo‘shliq, sarlavha va belgi ekran balandligiga (svh) qarab kichrayadi */}
-          <section
-            aria-labelledby="hero-title"
-            className="flex min-h-[calc(100svh_-_var(--header-h)_-_var(--footer-h))] flex-1 flex-col border-b border-line"
-          >
-            <div className="mx-auto grid w-[90%] flex-1 items-center gap-12 py-[clamp(1.25rem,5svh,4rem)] md:grid-cols-[minmax(0,1fr)_auto] lg:gap-20">
+          <section aria-labelledby="hero-title" className="flex min-h-[calc(100svh_-_var(--header-h))] flex-col border-b border-line">
+            <div
+              className={`grid flex-1 items-center gap-12 py-[clamp(1.25rem,5svh,4rem)] lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-14 ${HOME_WIDTH}`}
+            >
               <div>
                 <h1
                   id="hero-title"
@@ -60,29 +59,27 @@ export default function HomePage() {
                 <p className="mt-4 text-sm text-muted">Parol kerak emas: tasdiqlash kodi Telegram orqali keladi.</p>
               </div>
 
-              {/* "Asman" — osmon: belgi ufq chizig‘idan ko‘tarilib chiqadi, so‘ng sekin suzib turadi (globals.css) */}
-              <div aria-hidden="true" className="relative hidden justify-self-center md:block">
-                <AsmanMark className="asman-rise block h-[clamp(10rem,34svh,22rem)] w-auto" />
-                <span className="asman-horizon absolute inset-x-[-15%] -bottom-3 h-0.5 rounded-full bg-tile" />
+              {/* "Asman" — osmon: rasmiy logo (belgi va "ASMAN UNIVERSITY", login sahifasidagidek) ufq chizig‘idan
+                  ko‘tarilib chiqadi, so‘ng sekin suzib turadi (globals.css). Nom h1’da bor — bu yerda bezak.
+                  Logo keng: faqat lg dan, balandligi ekran eniga ham bog‘liq — matn ustunini siqmasin */}
+              <div aria-hidden="true" className="relative hidden justify-self-center lg:block">
+                <UniversityLogo className="asman-rise block h-[clamp(10rem,min(36svh,22vw),24rem)] w-auto" />
+                <span className="asman-horizon absolute inset-x-[-12%] -bottom-4 h-0.5 rounded-full bg-tile" />
               </div>
             </div>
           </section>
 
-          {/* Maqolalar ufqdan pastda, scroll bilan ko‘rinadi. Ular bo‘lmasa blok bo‘sh: chiziq ham yo‘q, aks holda ufq bilan ikki qavat bo‘lardi */}
-          <div className="bg-paper has-[section]:border-b has-[section]:border-line">
-            <LatestArticles />
-          </div>
+          {/* Ufqdan pastdagi bo‘limlar: fon navbat bilan oq va kulrang. Ma’lumotsiz bo‘lim (maqola, yangilik yo‘q) chizilmaydi */}
+          <HomeStats />
+          <HomeSteps />
+          <HomeFeatures />
+          <HomeArticles />
+          <HomeNews />
+          <HomeAuthors />
+          <HomeCta />
         </main>
 
-        <footer>
-          <div className="mx-auto flex min-h-(--footer-h) w-[90%] flex-wrap items-center justify-between gap-4">
-            {/* Telefonda belgi header’da turibdi: footer bir qatorda qolsin */}
-            <div className="hidden sm:block">
-              <SiteBrand />
-            </div>
-            <p className="text-sm text-muted">{SERVICE_NAME} xizmati asosida ishlaydi.</p>
-          </div>
-        </footer>
+        <PublicFooter wide />
       </div>
     </>
   );

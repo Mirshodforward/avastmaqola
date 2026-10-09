@@ -48,7 +48,7 @@ export async function getAiUsage() {
       .innerJoin(users, eq(users.id, aiRequests.userId))
       .where(gte(aiRequests.createdAt, since30))
       .groupBy(users.id)
-      .orderBy(desc(count()), desc(sumOf(aiRequests.costMicroUsd)))
+      .orderBy(desc(count()), desc(sumOf(aiRequests.costMicroUsd)), users.id)
       .limit(10),
     db
       .select({

@@ -43,6 +43,62 @@
       "when": 1791460360197,
       "tag": "0005_ai_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791525368197,
+      "tag": "0006_publication",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791527922970,
+      "tag": "0007_drop_published_name",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791536819514,
+      "tag": "0008_drop_academic_title",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791536967273,
+      "tag": "0009_drop_profile_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791547191342,
+      "tag": "0010_news",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791547340469,
+      "tag": "0011_zenodo_deposits",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791547432155,
+      "tag": "0012_article_ratings",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791548870400,
+      "tag": "0013_moderator_issue",
+      "breakpoints": true
     }
   ]
 }

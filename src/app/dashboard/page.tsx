@@ -66,11 +66,7 @@ async function Dashboard() {
   const current = steps.findIndex((s) => !s.done);
 
   return (
-    <DashboardShell
-      wide
-      admin={user.role === "admin"}
-      aside={<span className="hidden text-muted md:inline">{name}</span>}
-    >
+    <DashboardShell wide admin={user.role === "admin"} moderator={user.role === "moderator"}>
       <h1 className="font-serif text-3xl font-semibold tracking-tight sm:text-4xl">Xush kelibsiz, {user.firstName}!</h1>
       {current >= 0 && (
         <p className="mt-2 text-muted">

@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import type { Problem } from "@/lib/article-rules";
 import type { ArticleView as View } from "@/server/articles/view";
 import { ArticleView } from "./article-view";
+import { IssueFields, type IssueValues } from "./issue-fields";
 
 /**
  * Yuborishdan oldingi oxirgi qadam: o‘qituvchi maqola sahifasi aynan qanday ochilishini ko‘radi
@@ -15,20 +16,28 @@ export function ArticlePreview({
   view,
   absoluteUrl,
   problems,
+  issue,
   submitting,
+  aiBusy,
   onClose,
   onSubmit,
   onFix,
+  onIssueChange,
 }: {
   open: boolean;
   /** Faqat ochiq paytda hisoblanadi */
   view: () => View;
   absoluteUrl: string;
   problems: Problem[];
+  /** O‘qituvchi taklif qilgan joy: "3-son, 12-maqola" (oldindan to‘ldirilgan, moderator tasdiqlaydi) */
+  issue: IssueValues;
   submitting: boolean;
+  /** AI hali javob yozmoqda: forma o‘zgarishi mumkin — tasdiqlash kutadi */
+  aiBusy: boolean;
   onClose: () => void;
   onSubmit: () => void;
   onFix: (field: string) => void;
+  onIssueChange: (next: IssueValues) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
 
@@ -83,20 +92,23 @@ export function ArticlePreview({
                   ))}
                 </ul>
               </div>
+            ) : aiBusy ? (
+              <p className="text-sm text-muted">AI hali javob yozmoqda — tugashini kuting.</p>
             ) : (
               <p className="text-sm text-tile">
-                Hammasi tayyor. Tasdiqlasangiz, maqola universitet administratoriga ko‘rib chiqish uchun yuboriladi.
+                Yuborish bilan maqolani ochiq joylashga huquqingiz borligini tasdiqlaysiz. Maqola administratorga ko‘rib chiqishga ketadi.
               </p>
             )}
-            <div className="mt-3 flex flex-wrap gap-3">
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <IssueFields value={issue} onChange={onIssueChange} />
               <button type="button" className="btn btn-secondary" onClick={onClose}>
                 Tahrirga qaytish
               </button>
               <button
                 type="button"
                 className="btn btn-primary"
-                aria-disabled={submitting || problems.length > 0}
-                onClick={() => !submitting && problems.length === 0 && onSubmit()}
+                aria-disabled={submitting || aiBusy || problems.length > 0}
+                onClick={() => !submitting && !aiBusy && problems.length === 0 && onSubmit()}
               >
                 {submitting ? "Yuborilmoqda…" : "Tasdiqlash va yuborish"}
               </button>

@@ -1,6 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import { ACADEMIC_DEGREES, ACADEMIC_TITLES } from "@/lib/profile-labels";
+import { ACADEMIC_DEGREES } from "@/lib/profile-labels";
 import { cleanText } from "@/lib/text";
 import { NAME_PATTERN, normalizeOrcid } from "@/lib/validation";
 import { personName } from "../auth/schemas";
@@ -41,13 +41,8 @@ export const profileSchema = z.object({
   firstName: personName("Ism"),
   lastName: personName("Familiya"),
   patronymic: optional(text(60).refine((v) => !v || NAME_PATTERN.test(v), "Faqat harflar bo‘lishi kerak")),
-  // Ilmiy nashrlardagi ism: bosh harflar uchun nuqta ham ruxsat
-  publishedName: optional(
-    text(100).refine((v) => !v || /^[\p{L}\p{M}'‘’ʻʼ`.\- ]+$/u.test(v), "Faqat harflar, nuqta va defis"),
-  ),
   position: required("Lavozim", 80),
   academicDegree: choice(ACADEMIC_DEGREES),
-  academicTitle: choice(ACADEMIC_TITLES),
   institution: required("Muassasa", 150),
   department: optional(text(150)),
   direction: required("Yo‘nalish", 120),
@@ -69,13 +64,6 @@ export const profileSchema = z.object({
     "Google Scholar profil havolasini kiriting (scholar.google.com/citations?user=…)",
   ),
   scopusAuthorId: optional(z.string().trim().refine((v) => !v || /^\d{10,11}$/.test(v), "Scopus Author ID 10–11 xonali raqam")),
-  researcherId: optional(
-    z.string().trim().toUpperCase().refine((v) => !v || /^[A-Z]{1,3}-\d{4}-\d{4}$/.test(v), "ResearcherID ko‘rinishi: ABC-1234-2020"),
-  ),
-  researchgateUrl: link(/(^|\.)researchgate\.net$/, "ResearchGate profil havolasini kiriting"),
-  websiteUrl: link(null, "Havola http:// yoki https:// bilan boshlanishi kerak"),
-  publicEmail: optional(z.string().trim().refine((v) => !v || z.email().safeParse(v).success, "Email noto‘g‘ri")),
-  isPublic: z.boolean(),
 });
 
 export type ProfileInput = z.output<typeof profileSchema>;

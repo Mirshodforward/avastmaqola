@@ -1,6 +1,6 @@
 import { findArticlePdf } from "@/server/articles/public";
 import { parseArticleId } from "@/server/articles/schemas";
-import { getCurrentUser } from "@/server/auth/session";
+import { ADMIN_OPEN, canReview, getCurrentUser } from "@/server/auth/session";
 import { readStoredFile } from "@/server/storage";
 
 const notFound = () => new Response("Not found", { status: 404 });
@@ -13,10 +13,10 @@ export async function GET(_request: Request, ctx: RouteContext<"/maqola/[id]/pdf
 
   const isPublic = row.status === "published";
   if (!isPublic) {
-    // Tasdiqlanmagan maqola PDF’i faqat muallifga va (yuborilgan bo‘lsa) adminga; qoralama — faqat muallifga
+    // Tasdiqlanmagan maqola PDF’i faqat muallifga va (yuborilgan bo‘lsa) moderator yoki adminga; qoralama — faqat muallifga
     const user = await getCurrentUser();
-    const isAdmin = user?.role === "admin" && row.status !== "draft";
-    if (!user || (user.id !== row.userId && !isAdmin)) return notFound();
+    const isReviewer = (ADMIN_OPEN || canReview(user?.role)) && row.status !== "draft";
+    if (!isReviewer && user?.id !== row.userId) return notFound();
   }
 
   const data = await readStoredFile("articles", row.pdfKey).catch(() => null);

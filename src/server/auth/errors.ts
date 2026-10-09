@@ -8,7 +8,7 @@ export const AUTH_ERRORS = {
   profile_required: { status: 409, message: "Avval profilingizni to‘ldirib, saqlang." },
   not_found: { status: 404, message: "Topilmadi." },
   state_conflict: { status: 409, message: "Maqola holati o‘zgargan. Sahifani yangilang." },
-  incomplete: { status: 422, message: "Maqola hali to‘liq emas. Ro‘yxatdagi kamchiliklarni tuzating." },
+  incomplete: { status: 422, message: "Maqola hali to‘liq emas. Sahifani yangilab, qolgan maydonlarni to‘ldiring." },
   file_invalid: { status: 422, message: "Fayl PDF formatida bo‘lishi kerak.", field: "pdf" },
   file_too_large: { status: 413, message: "PDF hajmi 10 MB dan oshmasligi kerak.", field: "pdf" },
   limit_reached: {

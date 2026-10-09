@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { LogoutButton } from "@/components/auth/logout-button";
-import { Wordmark } from "@/components/wordmark";
+import { AsmanMark } from "@/components/asman-mark";
 
 const NAV = [
   { href: "/dashboard", label: "Kabinet" },
@@ -9,22 +9,29 @@ const NAV = [
 ] as const;
 
 /**
- * admin — ko‘rib chiqish navbatiga havola (sahifa foydalanuvchi rolini o‘zi biladi; skelet uchun kerak emas).
+ * admin — admin panelga havola (sahifa foydalanuvchi rolini o‘zi biladi; skelet uchun kerak emas).
+ * moderator — moderator panelga havola.
  * wide — kontent kompyuter ekranining butun kengligiga yoyiladi (kabinet bosh sahifasi).
  * Header doim butun kenglikda: menyu chapda, foydalanuvchi, "Chiqish" va logo o‘ngda.
  */
 export function DashboardShell({
   aside,
   admin = false,
+  moderator = false,
   wide = false,
   children,
 }: {
   aside?: ReactNode;
   admin?: boolean;
+  moderator?: boolean;
   wide?: boolean;
   children: ReactNode;
 }) {
-  const nav = admin ? [...NAV, { href: "/admin", label: "Admin panel" }] : NAV;
+  const nav = admin
+    ? [...NAV, { href: "/admin", label: "Admin panel" }]
+    : moderator
+      ? [...NAV, { href: "/moderator", label: "Moderator paneli" }]
+      : NAV;
   return (
     <>
       <header className="border-b border-line bg-paper">
@@ -39,7 +46,9 @@ export function DashboardShell({
           <div className="ml-auto flex items-center gap-4 text-sm">
             {aside}
             <LogoutButton />
-            <Wordmark />
+            <Link href="/" aria-label="Bosh sahifa" className="inline-flex">
+              <AsmanMark className="h-8 w-auto" />
+            </Link>
           </div>
         </div>
       </header>

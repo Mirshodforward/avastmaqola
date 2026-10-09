@@ -1,5 +1,5 @@
 import "server-only";
-import { count, desc, eq, or, sql } from "drizzle-orm";
+import { count, desc, eq, or, sql, type SQL } from "drizzle-orm";
 import type { ArticleStatus } from "@/lib/article-rules";
 import { db } from "../db";
 import { aiRequests, articles, authRequests, profiles, sessions, users } from "../db/schema";
@@ -46,12 +46,13 @@ export async function listTeachers({ q, page }: TeacherFilters) {
       published: articleCount("published"),
       rejected: articleCount("rejected"),
       ai30: sql<number>`(select count(*) from ${aiRequests} where ${aiRequests.userId} = ${users.id} and ${aiRequests.createdAt} >= ${daysStart(30)})::int`,
-      // Chiqishda sessiya qatori o‘chiriladi, shuning uchun tasdiqlangan kirish kodlari ham hisobga olinadi
-      lastLogin: sql<Date | null>`greatest(
+      // Chiqishda sessiya qatori o‘chiriladi, shuning uchun tasdiqlangan kirish kodlari ham hisobga olinadi.
+      // mapWith turini Date qilib qo‘yadi, lekin hech qachon kirmaganlarda null keladi
+      lastLogin: sql`greatest(
         (select max(${sessions.createdAt}) from ${sessions} where ${sessions.userId} = ${users.id}),
         (select max(${authRequests.completedAt}) from ${authRequests}
           where ${authRequests.phone} = ${users.phone} and ${authRequests.status} = 'verified')
-      )`.mapWith(sessions.createdAt),
+      )`.mapWith(sessions.createdAt) as SQL<Date | null>,
     })
     .from(users)
     .leftJoin(profiles, eq(profiles.userId, users.id))

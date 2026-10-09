@@ -2,6 +2,8 @@ import "server-only";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { cacheTag } from "next/cache";
 import { titleIn } from "@/lib/article-rules";
+import { venueLine } from "@/lib/citation";
+import { yearOf } from "@/lib/format";
 import { db } from "../db";
 import { articleAuthors, articles, profiles } from "../db/schema";
 import { authorTag } from "../profiles/service";
@@ -30,11 +32,25 @@ const listColumns = {
   titleRu: articles.titleRu,
   titleEn: articles.titleEn,
   publishedAt: articles.publishedAt,
+  venue: articles.venue,
+  volume: articles.volume,
+  issue: articles.issue,
+  pages: articles.pages,
+  pubYear: articles.pubYear,
   byline,
 };
 
-type ListRow = { id: number; lang: Parameters<typeof titleIn>[0]["lang"]; titleUz: string | null; titleRu: string | null; titleEn: string | null; publishedAt: Date | null; byline: string };
-const toItem = (r: ListRow) => ({ id: r.id, title: titleIn(r), byline: r.byline, publishedAt: r.publishedAt });
+type ListRow = Parameters<typeof titleIn>[0] &
+  Parameters<typeof venueLine>[0] & { id: number; publishedAt: Date | null; pubYear: number | null; byline: string };
+const toItem = (r: ListRow) => ({
+  id: r.id,
+  title: titleIn(r),
+  byline: r.byline,
+  publishedAt: r.publishedAt,
+  venue: venueLine(r),
+  // Asl nashr yili, bo‘lmasa saytda chop etilgan yil (chop etilgan maqolada sana doim bor — DB CHECK)
+  year: r.pubYear ?? yearOf(r.publishedAt!),
+});
 
 /** limit berilmasa — hammasi (/maqolalar Scholar uchun barcha maqolalarga yo‘l ochishi kerak) */
 export async function listPublishedArticles(limit?: number) {
@@ -58,7 +74,8 @@ export async function listPublishedByAuthor(userId: string) {
     .from(articles)
     .where(and(eq(articles.userId, userId), eq(articles.status, "published")))
     .orderBy(desc(articles.publishedAt));
-  return rows.map(toItem);
+  // Profilda Scholar’dagidek yil ustuni bor: eski nashr yuqorida turib qolmasin (bir yil ichida — saytdagi tartib)
+  return rows.map(toItem).sort((a, b) => b.year - a.year);
 }
 
 /** PDF so‘rovi uchun (keshsiz): kimga ko‘rsatish mumkinligini route hal qiladi */

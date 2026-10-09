@@ -26,10 +26,8 @@ async function ProfileEditor() {
     firstName: data?.firstName ?? user.firstName,
     lastName: data?.lastName ?? user.lastName,
     patronymic: p?.patronymic ?? "",
-    publishedName: p?.publishedName ?? "",
     position: p?.position ?? "",
     academicDegree: p?.academicDegree ?? "",
-    academicTitle: p?.academicTitle ?? "",
     institution: p?.institution ?? UNIVERSITY_NAME,
     department: p?.department ?? "",
     direction: p?.direction ?? "",
@@ -38,15 +36,10 @@ async function ProfileEditor() {
     orcid: data?.orcid ?? "",
     googleScholarUrl: p?.googleScholarUrl ?? "",
     scopusAuthorId: p?.scopusAuthorId ?? "",
-    researcherId: p?.researcherId ?? "",
-    researchgateUrl: p?.researchgateUrl ?? "",
-    websiteUrl: p?.websiteUrl ?? "",
-    publicEmail: p?.publicEmail ?? "",
-    isPublic: p?.isPublic ?? true,
   };
 
   return (
-    <DashboardShell wide admin={user.role === "admin"}>
+    <DashboardShell admin={user.role === "admin"}>
       <h1 className="font-serif text-3xl font-semibold tracking-tight">Profil</h1>
       <p className="mt-2 max-w-2xl text-muted">
         Olim sifatidagi ma’lumotlaringiz ommaviy sahifangizda va har bir maqolangiz tepasida ko‘rinadi.

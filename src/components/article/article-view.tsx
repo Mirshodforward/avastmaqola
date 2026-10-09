@@ -1,43 +1,67 @@
 import Link from "next/link";
 import { OrcidIcon } from "@/components/orcid-icon";
 import { Avatar } from "@/components/profile/avatar";
-import { LICENSE_INFO } from "@/lib/article-rules";
+import { Stars } from "@/components/rating/stars";
+import { T as RT, formatAverage } from "@/components/rating/text";
+import { LICENSE_INFO, VENUE_LABELS } from "@/lib/article-rules";
 import { ARTICLE_SOURCE } from "@/lib/brand";
-import { apaCitation, bibtexCitation } from "@/lib/citation";
+import { apaCitation, bibtexCitation, doiUrl, venueTail } from "@/lib/citation";
 import { formatBytes, formatDate, truncate, yearOf } from "@/lib/format";
+import { issueLabel } from "@/lib/issue";
 import { ABSTRACT_HEADINGS, KEYWORDS_HEADINGS, LANGS, type Lang } from "@/lib/langs";
 import { avatarUrl } from "@/lib/media";
 import { credentialsLine } from "@/lib/profile-labels";
 import type { ArticleView as View } from "@/server/articles/view";
 
 /**
- * Maqola sahifasi. Shriftlar ierarxiyasi Google Scholar uchun ataylab: sarlavha (h1) eng katta,
+ * Maqola sahifasi — nashr etilgan maqola tartibida: sarlavha, mualliflar, muassasalar, nashr ma’lumotlari,
+ * annotatsiya. Shriftlar ierarxiyasi Google Scholar uchun ataylab: sarlavha (h1) eng katta,
  * keyin muallif ismlari, bo‘lim sarlavhalari va sayt nomi ulardan kichik.
  */
-export function ArticleView({ v, absoluteUrl, preview = false }: { v: View; absoluteUrl: string; preview?: boolean }) {
+export function ArticleView({
+  v,
+  absoluteUrl,
+  preview = false,
+  rating,
+}: {
+  v: View;
+  absoluteUrl: string;
+  preview?: boolean;
+  /** Ommaviy sahifada: o‘rtacha baho — pastdagi "Iqtiboslar" bo‘limiga havola */
+  rating?: { avg: number; count: number };
+}) {
   const title = v.titles[v.lang];
   const year = yearOf(v.publishedAt ?? v.updatedAt);
-  const cite = { id: v.id, title, authors: v.authors, year, url: absoluteUrl, source: ARTICLE_SOURCE };
+  // "3-son, 12-maqola" — sahifadagi va iqtibosdagi raqam (saytdagi №id emas)
+  const place = issueLabel(v.issueNo, v.issueSeq);
+  // Zenodo DOI’si (nashriyot DOI’si bo‘lmasa): nashr qatori o‘rnida va iqtiboslarda. "Chop etilgan" sanasi o‘zgarmaydi
+  const zenodo: View["publication"] =
+    v.zenodoDoi && !v.publication?.doi
+      ? { type: null, venue: null, volume: null, issue: null, pages: null, year: null, doi: v.zenodoDoi }
+      : null;
+  const cite = { id: v.id, title, authors: v.authors, year, url: absoluteUrl, source: ARTICLE_SOURCE, place: v.issueSeq ? place : null, publication: v.publication ?? zenodo };
   const license = LICENSE_INFO[v.license];
-  const institutions = [...new Set(v.authors.map((a) => a.institution).filter(Boolean))];
+  // Muassasalar birinchi uchragan tartibida. Hamma bitta muassasadan bo‘lsa, raqamlar ortiqcha
+  const institutions = [...new Set(v.authors.map((a) => a.institution).filter((name) => name !== null))];
+  const numbered = institutions.length > 1 || (institutions.length === 1 && v.authors.some((a) => !a.institution));
 
-  // Sahifa matni o‘zbekcha; sarlavha va annotatsiyalar o‘z tilida (ekran o‘quvchi talaffuzi uchun)
+  // Sahifa matni o‘zbekcha; sarlavha va annotatsiyalar o‘z tilida (ekran o‘quvchi talaffuzi uchun).
+  // break-words: sarlavhadagi uzun bo‘linmas so‘z (formula, havola) telefonda sahifani kengaytirmasin
   return (
-    <article lang="uz" className="mx-auto max-w-3xl">
+    <article lang="uz" className="mx-auto max-w-3xl break-words">
       {preview && (
         <p className="mb-6 rounded-lg border border-lapis/30 bg-paper px-3 py-2 text-sm text-lapis">
           Oldindan ko‘rish. Sahifa ommaga faqat administrator tasdiqlagach ochiladi.
         </p>
       )}
 
-      {/* Muallif bloki — eng tepada (sarlavhadan kichik shriftda) */}
-      <AuthorBlock owner={v.owner} />
-
-      <p className="mt-6 text-sm text-muted">
+      <p className="text-sm text-muted">
         Ilmiy maqola.{" "}
         {v.publishedAt ? (
           <>
-            Chop etilgan: <time dateTime={new Date(v.publishedAt).toISOString()}>{formatDate(v.publishedAt)}</time>
+            {/* Boshqa joyda chiqqan maqolaning nashr yili pastdagi nashr qatorida — bu sana faqat saytga joylangan kun */}
+            {v.publication ? "Saytga joylangan" : "Chop etilgan"}:{" "}
+            <time dateTime={new Date(v.publishedAt).toISOString()}>{formatDate(v.publishedAt)}</time>
           </>
         ) : (
           "Hali chop etilmagan."
@@ -55,12 +79,13 @@ export function ArticleView({ v, absoluteUrl, preview = false }: { v: View; abso
             <span key={i}>
               {i > 0 && ", "}
               {a.isOwner && v.owner.slug ? (
-                <Link href={`/oqituvchi/${v.owner.slug}`} className="link">
+                <Link href={`/oqituvchi/${v.owner.slug}`} rel="author" className="link">
                   {name}
                 </Link>
               ) : (
                 name
               )}
+              {numbered && a.institution && <sup>{institutions.indexOf(a.institution) + 1}</sup>}
               {a.orcid && (
                 <a href={`https://orcid.org/${a.orcid}`} className="ml-1 align-middle" aria-label={`${name}: ORCID`} target="_blank" rel="noopener noreferrer">
                   <OrcidIcon />
@@ -70,10 +95,23 @@ export function ArticleView({ v, absoluteUrl, preview = false }: { v: View; abso
           );
         })}
       </p>
-      {institutions.length > 0 && <p className="mt-1 text-sm text-muted">{institutions.join("; ")}</p>}
+      {numbered ? (
+        <ol className="mt-2 space-y-0.5 text-sm text-muted">
+          {institutions.map((name, i) => (
+            <li key={name}>
+              <sup>{i + 1}</sup> {name}
+            </li>
+          ))}
+        </ol>
+      ) : (
+        institutions.length > 0 && <p className="mt-1 text-sm text-muted">{institutions[0]}</p>
+      )}
+
+      {v.publication && <PublicationLine p={v.publication} />}
+      {zenodo && <PublicationLine p={zenodo} />}
 
       <p className="mt-3 text-sm text-muted">
-        №{v.id}. Litsenziya:{" "}
+        {place}. Litsenziya:{" "}
         {license.url ? (
           <a href={license.url} className="link" target="_blank" rel="license noopener noreferrer">
             {license.label}
@@ -100,6 +138,23 @@ export function ArticleView({ v, absoluteUrl, preview = false }: { v: View; abso
             rel="noopener noreferrer"
           >
             Telegram’da ulashish
+          </a>
+        )}
+        {rating && (
+          <a
+            href="#iqtiboslar"
+            className="btn btn-ghost btn-lg"
+            aria-label={rating.count ? RT.badge.label(formatAverage(rating.avg), rating.count) : undefined}
+          >
+            <Stars value={rating.avg} tone="paper" className="text-lg" />
+            {rating.count ? (
+              <>
+                <span className="font-semibold">{formatAverage(rating.avg)}</span>
+                <span className="text-muted">({rating.count})</span>
+              </>
+            ) : (
+              RT.badge.rate
+            )}
           </a>
         )}
       </div>
@@ -149,23 +204,28 @@ export function ArticleView({ v, absoluteUrl, preview = false }: { v: View; abso
   );
 }
 
-function AuthorBlock({ owner }: { owner: View["owner"] }) {
-  const details = [owner.direction, owner.institution].filter(Boolean).join(", ");
-  const body = (
-    <span className="flex items-center gap-3">
-      <Avatar src={owner.photoKey ? avatarUrl(owner.photoKey, 128) : null} name={owner.name} size={56} />
-      <span className="min-w-0">
-        <span className="block text-xl font-semibold leading-tight">{owner.name}</span>
-        {details && <span className="mt-0.5 block text-sm text-muted">{details}</span>}
-      </span>
-    </span>
-  );
-  return owner.slug ? (
-    <Link href={`/oqituvchi/${owner.slug}`} rel="author" className="-m-2 inline-block rounded-xl p-2 hover:bg-paper">
-      {body}
-    </Link>
-  ) : (
-    <div>{body}</div>
+/** "Konferensiya to‘plami: Proceedings of SPIE 14126, 1412603 (2026) · DOI: 10.1117/12.3110012" */
+function PublicationLine({ p }: { p: NonNullable<View["publication"]> }) {
+  return (
+    <p className="mt-4 text-sm leading-relaxed">
+      {p.venue && (
+        <>
+          {p.type && <span className="text-muted">{VENUE_LABELS[p.type]}: </span>}
+          <cite className="italic">{p.venue}</cite>
+          {venueTail(p)}
+          {p.year !== null && ` (${p.year})`}
+        </>
+      )}
+      {p.venue && p.doi && " · "}
+      {p.doi && (
+        <>
+          <span className="text-muted">DOI: </span>
+          <a href={doiUrl(p.doi)} className="link" target="_blank" rel="noopener noreferrer">
+            {p.doi}
+          </a>
+        </>
+      )}
+    </p>
   );
 }
 

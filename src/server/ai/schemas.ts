@@ -33,6 +33,8 @@ const draft = z.object({
       }),
     )
     .max(30),
+  // Yuborishdan oldin yana nima kerakligini model o‘qituvchiga aytishi uchun
+  hasProfile: z.boolean(),
 });
 
 const turnText = z.string().trim().min(1).max(AI_LIMITS.messageMax, `Ko‘pi bilan ${AI_LIMITS.messageMax} ta belgi`);
@@ -99,40 +101,59 @@ function clamp(value: string, max: number): string {
   return (space > max * 0.6 ? cut.slice(0, space) : cut).trimEnd();
 }
 
+/** O‘zbekcha imlo: o‘ va g‘ — ‘ (U+2018), tutuq belgisi — ’ (U+2019). Model belgilarni aralashtirib yozishi mumkin */
+const uzApostrophes = (v: string) =>
+  v.replace(/(\p{L})['`ʻʼ‘’´](?=\p{L})/gu, (_, letter: string) => `${letter}${/[oOgG]/.test(letter) ? "‘" : "’"}`);
+
 // Saqlashdagi muallif ismi qoidasiga (harflar, tutuq belgilari, nuqta, defis) mos kelmaydigan belgilar
 const NOT_NAME = /[^\p{L}\p{M}'‘’ʻʼ`.\- ]/gu;
-const name = (v: string) => v.replace(NOT_NAME, "").replace(/\s+/g, " ").trim().slice(0, 64);
+// Bo‘shliqlar avval oddiy probelga aylanadi (aks holda NBSP kabi belgi o‘chib, ism va familiya yopishib qoladi)
+const name = (v: string) =>
+  uzApostrophes(v.replace(/\s+/g, " ").replace(NOT_NAME, "").replace(/ +/g, " ").trim()).slice(0, 64);
+/** Familiyalarni solishtirish: katta-kichik harf, tutuq belgisi va nuqtalar farqi hisobga olinmaydi */
+const sameName = (a: string, b: string) => a.toLowerCase().replace(/[^\p{L}]/gu, "") === b.toLowerCase().replace(/[^\p{L}]/gu, "");
 
 /**
  * Taklifni forma qoidalariga moslaydi: ortiqcha belgilar tozalanadi, uzun matn qisqartiriladi.
- * Tuzatib bo‘lmaydigan maydon taklifdan chiqariladi va dropped ro‘yxatida qaytadi.
+ * Tuzatib bo‘lmaydigan maydon taklifdan chiqariladi (dropped). notes — modelga qaytariladigan izoh (inglizcha):
+ * qaysi maydon kesildi yoki qo‘llanmadi, model keyingi qadamda to‘g‘rilab yuboradi.
  */
-export function normalizeProposal(input: ToolInput, draft: AiDraft): { proposal: AiProposal; dropped: string[] } {
+export function normalizeProposal(input: ToolInput, draft: AiDraft) {
   const proposal: AiProposal = {};
   const dropped: string[] = [];
+  const notes: string[] = [];
   if (input.lang) proposal.lang = input.lang;
 
   for (const lang of LANGS) {
     const s = LANG_SUFFIX[lang];
+    const uz = (v: string) => (lang === "uz" ? uzApostrophes(v) : v);
     const title = input[`title${s}`];
     if (title !== undefined) {
-      const v = clamp(oneLine(title).replace(/(?<!\.)\.$/, ""), L.titleMax);
+      const full = uz(oneLine(title).replace(/(?<!\.)\.$/, ""));
+      const v = clamp(full, L.titleMax);
+      if (v.length < full.length) notes.push(`title${s} had ${full.length} characters (max ${L.titleMax}) and was cut; send a shorter title.`);
       if (v) proposal[`title${s}`] = v;
       else dropped.push(`title${s}`);
     }
     const abstract = input[`abstract${s}`];
     if (abstract !== undefined) {
-      const v = clamp(cleanText(abstract), L.abstractMax);
+      const full = uz(cleanText(abstract));
+      const v = clamp(full, L.abstractMax);
+      if (v.length < full.length)
+        notes.push(`abstract${s} had ${full.length} characters (max ${L.abstractMax}) and was cut at a sentence end; send a complete version under ${L.abstractMax} characters.`);
       if (v) proposal[`abstract${s}`] = v;
       else dropped.push(`abstract${s}`);
     }
     const words = input[`keywords${s}`];
     if (words !== undefined) {
+      // Formada kalit so‘zlar vergul bilan yoziladi: ichida vergul bo‘lgan "so‘z" saqlashda ikkiga bo‘linib, limitdan oshardi
+      const split = words.flatMap((w) => w.split(/[,;\n]/)).map((w) => uz(oneLine(w).replace(/\.+$/, ""))).filter(Boolean);
+      const long = split.filter((w) => w.length > L.keywordMax);
+      if (long.length) notes.push(`keywords${s}: removed keywords longer than ${L.keywordMax} characters: ${long.join("; ")}.`);
       const seen = new Set<string>();
-      const v = words
-        .map((w) => oneLine(w).replace(/[.;,]+$/, ""))
-        .filter((w) => w && w.length <= L.keywordMax && !seen.has(w.toLowerCase()) && seen.add(w.toLowerCase()))
-        .slice(0, L.keywordsMax);
+      const unique = split.filter((w) => w.length <= L.keywordMax && !seen.has(w.toLowerCase()) && seen.add(w.toLowerCase()));
+      if (unique.length > L.keywordsMax) notes.push(`keywords${s}: only the first ${L.keywordsMax} keywords were kept.`);
+      const v = unique.slice(0, L.keywordsMax);
       if (v.length) proposal[`keywords${s}`] = v;
       else dropped.push(`keywords${s}`);
     }
@@ -142,20 +163,29 @@ export function normalizeProposal(input: ToolInput, draft: AiDraft): { proposal:
     // O‘qituvchining o‘z qatori (profiliga bog‘lanadi) formadagidek qoladi: maqola matnidagi yashirin
     // ko‘rsatma uning ismi yoki ORCID’ini almashtira olmasin
     const me = draft.authors.find((a) => a.isMe);
-    const authors = input.authors.map((a) => ({
-      givenName: name(a.isMe && me?.givenName ? me.givenName : a.givenName),
-      familyName: name(a.isMe && me?.familyName ? me.familyName : a.familyName),
-      institution: clamp(oneLine(a.institution), 150),
-      orcid: normalizeOrcid(a.isMe && me ? me.orcid : a.orcid) ?? "",
-      isMe: a.isMe,
-    }));
-    const valid =
-      authors.length > 0 &&
-      authors.length <= L.authorsMax &&
-      authors.filter((a) => a.isMe).length === 1 &&
-      authors.every((a) => a.givenName && a.familyName);
-    if (valid) proposal.authors = authors;
-    else dropped.push("authors");
+    const marked = input.authors.filter((a) => a.isMe);
+    const problem =
+      input.authors.length === 0 || input.authors.length > L.authorsMax
+        ? `the list must have 1-${L.authorsMax} authors`
+        : marked.length !== 1
+          ? "exactly one author must have isMe: true (the teacher's own row)"
+          : // Boshqa muallif "isMe" deb belgilansa, uning ismi o‘qituvchinikiga almashib ketardi
+            me?.familyName && !sameName(marked[0].familyName, me.familyName)
+            ? `the row marked isMe is "${marked[0].givenName} ${marked[0].familyName}", but the teacher is "${me.givenName} ${me.familyName}"; keep the teacher's row with exactly their name`
+            : null;
+    if (problem) {
+      dropped.push("authors");
+      notes.push(`authors were not applied: ${problem}.`);
+    } else {
+      // Ismi bo‘sh hammuallif ham qoladi: forma saqlashda aynan o‘sha qatorni ko‘rsatadi
+      proposal.authors = input.authors.map((a) => ({
+        givenName: name(a.isMe && me?.givenName ? me.givenName : a.givenName),
+        familyName: name(a.isMe && me?.familyName ? me.familyName : a.familyName),
+        institution: clamp(oneLine(a.institution), 150),
+        orcid: normalizeOrcid(a.isMe && me ? me.orcid : a.orcid) ?? "",
+        isMe: a.isMe,
+      }));
+    }
   }
-  return { proposal, dropped };
+  return { proposal, dropped, notes };
 }

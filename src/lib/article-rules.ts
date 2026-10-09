@@ -15,23 +15,31 @@ export const STATUS_LABELS: Record<ArticleStatus, string> = {
 
 export const LICENSES = ["cc-by-4.0", "cc-by-nc-4.0", "all-rights-reserved"] as const;
 export type License = (typeof LICENSES)[number];
-export const LICENSE_INFO: Record<License, { label: string; url: string | null; hint: string }> = {
+export const LICENSE_INFO: Record<License, { label: string; url: string | null }> = {
   "cc-by-4.0": {
     label: "CC BY 4.0",
     url: "https://creativecommons.org/licenses/by/4.0/",
-    hint: "Tavsiya etiladi: muallifni ko‘rsatgan holda hamma o‘qishi va tarqatishi mumkin.",
   },
   "cc-by-nc-4.0": {
     label: "CC BY-NC 4.0",
     url: "https://creativecommons.org/licenses/by-nc/4.0/",
-    hint: "Faqat notijorat maqsadda tarqatish mumkin.",
   },
   "all-rights-reserved": {
     label: "Barcha huquqlar himoyalangan",
     url: null,
-    hint: "O‘qish mumkin, tarqatish uchun muallif ruxsati kerak.",
   },
 };
+
+/** Maqola boshqa joyda allaqachon chop etilgan bo‘lsa: qayerda (Scholar uchun jurnal va konferensiya teglari har xil) */
+export const VENUE_TYPES = ["journal", "conference"] as const;
+export type VenueType = (typeof VENUE_TYPES)[number];
+export const VENUE_LABELS: Record<VenueType, string> = { journal: "Jurnal", conference: "Konferensiya to‘plami" };
+
+/** "https://doi.org/10.1117/12.3110012", "doi: 10.1117/…" → "10.1117/12.3110012"; noto‘g‘ri bo‘lsa null */
+export function normalizeDoi(input: string): string | null {
+  const v = input.trim().replace(/^(?:https?:\/\/(?:dx\.)?doi\.org\/|doi:\s*)/i, "");
+  return /^10\.\d{4,9}\/\S+$/.test(v) ? v : null;
+}
 
 export const ARTICLE_LIMITS = {
   titleMin: 10,
@@ -55,13 +63,24 @@ export type AuthorInput = {
   isMe: boolean;
 };
 
+/** Nashr ma’lumotlari (ixtiyoriy): maqola jurnal yoki konferensiya to‘plamida chiqqan bo‘lsa */
+export type PublicationFields = {
+  venueType: VenueType | null;
+  venue: string;
+  volume: string;
+  issue: string;
+  /** "125–128" yoki maqola raqami ("1412603") */
+  pages: string;
+  pubYear: number | null;
+  doi: string;
+};
+
 export type ArticleFields = {
   lang: Lang | null;
   license: License;
-  rightsConfirmed: boolean;
   hasPdf: boolean;
   authors: AuthorInput[];
-} & Record<`title${"Uz" | "Ru" | "En"}` | `abstract${"Uz" | "Ru" | "En"}`, string> &
+} & PublicationFields & Record<`title${"Uz" | "Ru" | "En"}` | `abstract${"Uz" | "Ru" | "En"}`, string> &
   Record<`keywords${"Uz" | "Ru" | "En"}`, string[]>;
 
 export type Problem = { field: string; message: string };
@@ -123,6 +142,5 @@ export function articleProblems(a: ArticleFields): Problem[] {
   if (!distinct("abstract")) add("abstractEn", "Annotatsiyalar har xil tilda bo‘lishi kerak, nusxa emas");
 
   if (!a.hasPdf) add("pdf", "Maqolaning PDF faylini yuklang");
-  if (!a.rightsConfirmed) add("rightsConfirmed", "Mualliflik huquqini tasdiqlang");
   return problems;
 }

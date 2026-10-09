@@ -29,13 +29,14 @@ flowchart LR
   Z --> DC["DataCite"]
   DC -->|"auto-update"| O["ORCID profili"]
   DC --> OA["OpenAlex"]
-  Z --> GS["Google Scholar"]
-  P --> GS
+  P --> GS["Google Scholar"]
   GS -->|"avtomatik yangilanish"| GSP["Scholar profili"]
   Z -.->|"DOI bo‘yicha taklif"| RG["ResearchGate"]
   A -.->|"tayyor ma’lumot, qo‘lda"| RG
   J["Indekslangan jurnal"] --> SC["Scopus / WoS"]
 ```
+
+Google Scholar Zenodo’ni indekslamaydi ([Zenodo FAQ](https://support.zenodo.org/help/en-gb/18-general/61-is-zenodo-indexed-by-google-scholar)) — Scholar maqolani bizning sahifadagi `citation_*` teglardan oladi.
 
 ## 2. Platformalar xaritasi
 
@@ -96,7 +97,7 @@ flowchart TB
 | `articles` | Yuklash, admin tasdig‘i, ommaviy sahifa, Scholar teglari | ✅ tayyor |
 | `ai` | Muharrirdagi AI yordamchi (Claude): maqolani uch tilda to‘ldirish | ✅ tayyor |
 | `distribution` | Kanal adapterlari, holat kuzatish, operator navbati | 4-bosqich |
-| `admin` | Ko‘rib chiqish navbati (✅); operator paneli, hisobotlar | 5-bosqich |
+| `admin` | ✅ `/admin`: umumiy statistika, navbat, maqolalar, o‘qituvchilar, AI so‘rovlar; operator paneli (tarqatish) — 5-bosqich | ✅ / 5-bosqich |
 
 ### Papkalar
 
@@ -138,7 +139,7 @@ interface PublishChannel {
 Hozir mavjud ([schema.ts](../src/server/db/schema.ts)): `users`, `auth_requests`, `sessions`, `profiles`, `articles`, `article_authors`, `ai_requests`.
 
 - **profiles** — `users` bilan 1:1, birinchi saqlashda yaratiladi. `slug` o‘zgarmaydi (havolalar buzilmasin). Telefon va Telegram ommaviy so‘rovlarda hech qachon tanlanmaydi.
-- **articles** — URL `/maqola/{id}` (raqam: uch tildagi sarlavhadan slug tanlab bo‘lmaydi). Uch til uchun 9 ustun (`title_/abstract_/keywords_` × `uz|ru|en`) va `lang` — PDF tili, h1 va `citation_title` shu tilda. Holatlar: `draft → submitted → published`, `rejected` (tuzatishga qaytgan yoki saytdan olib tashlangan). `published_at` birinchi chop etishda qo‘yiladi va o‘zgarmaydi. DB CHECK: yuborilgan maqolada barcha 9 matn, PDF va huquq tasdig‘i bo‘lishi shart.
+- **articles** — URL `/maqola/{id}` (raqam: uch tildagi sarlavhadan slug tanlab bo‘lmaydi). Ixtiyoriy nashr ma’lumotlari (maqola jurnal yoki konferensiya to‘plamida allaqachon chiqqan bo‘lsa): `venue_type` (journal|conference), `venue`, `volume`, `issue`, `pages` (oraliq yoki maqola raqami), `pub_year`, `doi` (prefiksisiz, DB CHECK) — Scholar teglari va iqtiboslarda ishlatiladi. Uch til uchun 9 ustun (`title_/abstract_/keywords_` × `uz|ru|en`) va `lang` — PDF tili, h1 va `citation_title` shu tilda. Holatlar: `draft → submitted → published`, `rejected` (tuzatishga qaytgan yoki saytdan olib tashlangan). `published_at` birinchi chop etishda qo‘yiladi va o‘zgarmaydi. DB CHECK: yuborilgan maqolada barcha 9 matn, PDF va huquq tasdig‘i bo‘lishi shart.
 - **article_authors** — mualliflar PDF’dagi tartibda (`citation_author` shu tartibda chiqadi). Faqat o‘qituvchining o‘z qatori `user_id` bilan bog‘langan, hammualliflar oddiy matn.
 - **ai_requests** — AI yordamchiga har bir so‘rov: holat, tokenlar (kesh bilan), taxminiy narx (mikrodollar), davomiylik, xato kodi. Kunlik limit va admin statistikasi shundan. Suhbat matni saqlanmaydi.
 
@@ -206,9 +207,9 @@ Kirish (login) xuddi shunday, faqat birinchi qadamda telefon raqamning o‘zi ki
 ### 5.3 Maqola joylash va tasdiqlash ✅
 
 1. O‘qituvchi kabinetda "Yangi maqola" → qoralama yaratiladi (`/dashboard/articles/{id}`). Qoralama chala bo‘lishi mumkin, "Saqlash" bilan saqlanadi.
-2. Muharrir: PDF tili, mualliflar (tartib PDF’dagidek), uch tilda sarlavha, annotatsiya va kalit so‘zlar, PDF (≤10 MB, `%PDF-` imzosi tekshiriladi), litsenziya, huquq tasdig‘i. Kamchiliklar ro‘yxati klient va serverda bitta funksiyadan keladi ([article-rules.ts](../src/lib/article-rules.ts)), jumladan ruscha matn kirillda, inglizchasi lotinda bo‘lishi.
+2. Muharrir — chapda AI yordamchi (40%), o‘ngda 4 bosqich: ① maqola matni — PDF (≤10 MB, `%PDF-` imzosi tekshiriladi) ② sarlavha (va maqola tili) ③ mualliflar va tashkilotlar ④ annotatsiya va kalit so‘zlar (uch tilda); tepada bosqichlar holati. Nashr ma’lumotlari (jurnal, DOI) formada ko‘rsatilmaydi va AI ham taklif qilmaydi; ustunlar va Scholar teglari saqlanib qolgan. Litsenziya sukut bo‘yicha CC BY 4.0 (alohida bosqich yo‘q); huquq tasdig‘i — yuborishning o‘zi (`rights_confirmed_at` yuborishda yoziladi), bu ko‘rinish oynasida yuborish tugmasi yonida yozilgan. Kamchiliklar ro‘yxati klient va serverda bitta funksiyadan keladi ([article-rules.ts](../src/lib/article-rules.ts)), jumladan ruscha matn kirillda, inglizchasi lotinda bo‘lishi.
 3. "Ko‘rish va yuborish" → sahifa ommaga qanday ochilishi oynada ko‘rsatiladi; o‘qituvchi **tasdiqlasa** → `submitted`, adminlarga Telegram xabari. Shundan keyin o‘qituvchi tahrirlay olmaydi. Maydonlarni AI yordamchi to‘ldirishi mumkin (5.5).
-4. Admin `/admin` navbatida (eng eskisi birinchi) maqolani ommaviy sahifa ko‘rinishida ko‘radi: **Chop etish** yoki izoh bilan **Tuzatishga qaytarish**. Chop etilganini izoh bilan **saytdan olib tashlash** mumkin. Holat compare-and-set bilan o‘zgaradi; qaror admin ko‘rgan yuborishga (`submitted_at`) bog‘langan — o‘qituvchi shu orada qayta yuborgan bo‘lsa, eski oynadan tasdiqlab bo‘lmaydi (409).
+4. Admin `/admin/queue` navbatida (eng eskisi birinchi; umumiy statistika `/admin`da) maqolani ommaviy sahifa ko‘rinishida ko‘radi: **Chop etish** yoki izoh bilan **Tuzatishga qaytarish**. Chop etilganini izoh bilan **saytdan olib tashlash** mumkin. Holat compare-and-set bilan o‘zgaradi; qaror admin ko‘rgan yuborishga (`submitted_at`) bog‘langan — o‘qituvchi shu orada qayta yuborgan bo‘lsa, eski oynadan tasdiqlab bo‘lmaydi (409).
 5. Chop etilgach: `/maqola/{id}` ochiladi, keshdagi teglar (`article:{id}`, `articles`, `author:{userId}`) darhol eskiradi, o‘qituvchiga Telegram xabari boradi.
 
 Ommaviy sahifalar (`/maqola/[id]`, `/oqituvchi/[slug]`) `ensureStatic = 'navigation'`: birinchi so‘rov ham (Scholar boti ham) tayyor HTML oladi, yo‘q sahifa haqiqiy 404. `next build` bazaga murojaat qilmaydi: `generateStaticParams` o‘rinbosar qaytaradi, ro‘yxatlar va sitemap `connection()` bilan so‘rov vaqtida.
@@ -243,14 +244,17 @@ sequenceDiagram
 
 ### 5.5 AI yordamchi ✅
 
-Muharrirning o‘ng tomonida (mobilda alohida oynada) chat. O‘qituvchi PDF’ni yuklaydi yoki maqola matnini chatga joylashtiradi (istalgan tilda) — model sarlavha, annotatsiya, kalit so‘zlar, maqola tili va mualliflarni o‘zbek, rus va ingliz tillarida to‘ldiradi. Keyin "Formani shunday o‘zgartirdim" kartasi, "Bekor qilish" va sahifa ko‘rinishi; yuborishni o‘qituvchining o‘zi tasdiqlaydi.
+Muharrirning o‘ng tomonida (mobilda alohida oynada) chat. O‘qituvchi PDF’ni yuklaydi yoki maqola matnini chatga joylashtiradi (istalgan tilda) — model sarlavha, annotatsiya va kalit so‘zlarni o‘zbek, rus va ingliz tillarida to‘ldiradi, maqola tilini belgilaydi va mualliflar ro‘yxatini tuzadi. Taklif formaga darhol qo‘llanadi (o‘zgargan maydonlar kartada, "O‘zgarishlarni qaytarish" bilan), model esa oxirida nima qilganini va yuborishdan oldin yana nima kerakligini yozadi. Yuborishni o‘qituvchi "Ko‘rish va yuborish" oynasida o‘zi tasdiqlaydi.
 
 - **Model:** `claude-opus-5-5`, adaptiv thinking, `effort: medium`. Server tomonida `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`): xavfsizlik klassifikatori rad etsa, so‘rov tavsiya etilgan zaxira modelda bajariladi.
-- **Oqim:** `POST /api/articles/{id}/ai` → NDJSON ([lib/ai.ts](../src/lib/ai.ts) `AiEvent`): holat, matn bo‘laklari, yozilayotgan maydon, taklif, yakun. Model formani `propose_changes` vositasi (strict sxema, `eager_input_streaming`) orqali o‘zgartiradi; taklif serverda zod bilan tekshiriladi va forma qoidalariga moslanadi (uzunlik, takrorlar, muallif ismi belgilari, ORCID nazorat raqami). Model taklifni bir necha chaqiruvga bo‘lsa, tool-use sikli (≤3 aylanish) ularni birlashtiradi; har aylanishdan keyin to‘plangan taklif darhol yuboriladi.
-- **Stateless:** suhbat tarixi klientda, har so‘rovda yuboriladi (birinchi juftlik + oxirgi 5 ta). Formaning joriy (saqlanmagan) holati oxirgi xabarda. PDF va birinchi xabar har doim bir xil boshlanmada turadi — keyingi xabarlarda ular keshdan (0,05× narx) o‘qiladi.
-- **Limitlar:** bir o‘qituvchiga kuniga 30 so‘rov (Toshkent vaqti), bir vaqtda bitta javob (advisory lock), PDF ≤150 000 token (taxminan 50 sahifa; kattasi modelga yuborilmaydi — model matnni chatga joylashtirishni so‘raydi), xabar ≤100 000 belgi, so‘rov tanasi ≤1 MB, javob ≤32 000 token.
-- **Narx (o‘lchangan):** to‘liq to‘ldirish ~$0,13 va ~50 s; kichik tuzatish ~$0,04 va ~13 s.
-- **Xavfsizlik:** model faqat o‘qituvchining o‘z formasiga taklif beradi (serverda hech narsa yozmaydi), litsenziya va huquq tasdig‘iga tegmaydi. Maqola matnidagi ko‘rsatmalar ma’lumot sifatida qaraladi. Matn va PDF tahlil uchun Anthropic’ga yuboriladi — bu panelda yozilgan.
+- **Oqim:** `POST /api/articles/{id}/ai` → NDJSON ([lib/ai.ts](../src/lib/ai.ts) `AiEvent`): holat, yozilayotgan maydon, taklif, matn, yakun. Model formani `propose_changes` vositasi (strict sxema, `eager_input_streaming`) orqali o‘zgartiradi va **avval chaqiradi, xabarni keyin yozadi**: Opus 5.5’da tool chaqiruvidan oldingi uzun matn ko‘rinmas `thinking` blokiga aylanishi mumkin, oxirgi matn esa doim oddiy matn.
+- **Tool-use sikli (≤4 aylanish):** har chaqiruv serverda zod bilan tekshiriladi va forma qoidalariga moslanadi (uzunlik, takrorlar, vergulli kalit so‘zlar, o‘zbekcha ‘ va ’ belgilari, muallif ismlari, ORCID nazorat raqami). Kesilgan yoki qo‘llanmagan maydon modelga `tool_result`da aniq sabab bilan qaytadi — model keyingi aylanishda tuzatib yuboradi. Har aylanishdan keyin to‘plangan taklif darhol klientga yuboriladi. Zaxira modelga o‘tilsa, rad etilgan urinishning chala chaqiruvlari tashlanadi.
+- **O‘qituvchi qatori:** `isMe` qatorining ismi va ORCID’i formadagidan olinadi; model boshqa muallifni "isMe" deb belgilasa, ro‘yxat qo‘llanmaydi (maqoladagi yashirin ko‘rsatma o‘qituvchi profilini begona ismga bog‘lay olmasin).
+- **Qaytarish:** faqat hali AI qiymati turgan maydonlar qaytariladi — keyin o‘qituvchi yoki boshqa javob o‘zgartirgan maydonga tegilmaydi. Saqlash/yuborish paytida va ko‘rinish oynasi ochiq turganda taklif formaga tushmaydi ("Formaga qo‘llash" tugmasi qoladi); AI yozayotganda yuborish tasdig‘i kutadi.
+- **Stateless:** suhbat tarixi klientda, har so‘rovda yuboriladi (birinchi juftlik + oxirgi 5 ta). Formaning joriy (saqlanmagan) holati va yuborishdan oldin yetishmayotganlar (PDF, profil) oxirgi xabarda. Kesh: tizim ko‘rsatmasi, PDF + birinchi xabar va oxirgi xabar — keyingi aylanish va xabarlar keshdan (0,05× narx) o‘qiladi.
+- **Limitlar:** bir o‘qituvchiga kuniga 30 so‘rov va $5 (Toshkent vaqti), bir vaqtda bitta javob (advisory lock), bitta so‘rov ≤4 daqiqa; PDF ≤150 000 token (taxminan 50 sahifa) — kattasi yoki ochilmaydigani (buzuq, parolli) modelga yuborilmaydi, model matnni chatga joylashtirishni so‘raydi; xabar ≤100 000 belgi, butun suhbat ≤150 000, model javobi tarixda ≤8 000, javob ≤32 000 token. Limit va PDF tekshiruvi qimmat ishdan oldin. Sahifadan chiqilsa yoki "To‘xtatish" bosilsa, model ham to‘xtaydi.
+- **Narx (o‘lchangan):** to‘liq to‘ldirish ~$0,10 va ~35–40 s; kichik tuzatish ~$0,02–0,04 va ~10 s. To‘xtatilgan so‘rovning chiqish tokenlari to‘liq hisobga tushmaydi (taxminiy narx biroz kam).
+- **Xavfsizlik:** model faqat o‘qituvchining o‘z formasiga taklif beradi (serverda hech narsa yozmaydi), litsenziya va huquq tasdig‘iga tegmaydi; hamma narsa saqlashda `draftSchema`, yuborishda `articleProblems` va admin tomonidan qayta tekshiriladi. Maqola matnidagi ko‘rsatmalar ma’lumot sifatida qaraladi. Matn va PDF tahlil uchun Anthropic’ga yuboriladi — bu panelda doim yozilgan. Suhbat matni saqlanmaydi, faqat statistika (`ai_requests`).
 
 ## 6. Qarorlar va cheklovlar
 

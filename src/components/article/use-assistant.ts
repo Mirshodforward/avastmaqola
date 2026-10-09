@@ -12,14 +12,16 @@ export type ChatMessage = {
   /** Hozir yozilayotgan maydon (taklif kelguncha) */
   field?: string;
   error?: string;
-  proposal?: { value: AiProposal; dropped: string[]; applied: boolean };
+  /** undone — o‘qituvchi "O‘zgarishlarni qaytarish"ni bosgan (tugma "Qayta qo‘llash" bo‘ladi) */
+  proposal?: { value: AiProposal; dropped: string[]; applied: boolean; undone: boolean };
 };
 
 export type AssistantHandlers = {
   draft: () => AiDraft;
-  /** Taklifni formaga qo‘llaydi; forma band bo‘lsa (saqlanmoqda) false */
+  /** Taklifni formaga qo‘llaydi; forma band bo‘lsa (saqlanmoqda, ko‘rinish oynasi ochiq) false */
   apply: (messageId: number, proposal: AiProposal) => boolean;
-  undo: (messageId: number) => void;
+  /** Forma band bo‘lsa false — taklif qo‘llangan holicha qoladi */
+  undo: (messageId: number) => boolean;
 };
 
 /** Tarix: tugagan juftliklar. Birinchisi doim qoladi (unda maqola matni bo‘lishi mumkin va u keshlanadi) */
@@ -55,6 +57,8 @@ async function errorMessage(res: Response) {
 export function useAssistant(articleId: number, handlers: AssistantHandlers) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [remaining, setRemaining] = useState<number | null>(null);
+  // Yozilayotgan xabar shu yerda: mobil oyna yopilib-ochilganda (masalan, joylashtirilgan maqola) yo‘qolmasin
+  const [text, setText] = useState("");
   const controller = useRef<AbortController | null>(null);
   const seq = useRef(0);
   // O‘qituvchi bekor qilgan javobning keyingi (to‘ldirilgan) takliflari formaga o‘zi qaytib tushmasin
@@ -64,6 +68,11 @@ export function useAssistant(articleId: number, handlers: AssistantHandlers) {
   useEffect(() => {
     latest.current = handlers;
   });
+  // Sahifadan chiqilsa (yoki maqola yuborilib muharrir yopilsa) javob to‘xtatiladi: model behuda ishlamasin
+  useEffect(() => {
+    const active = controller;
+    return () => active.current?.abort();
+  }, []);
 
   const last = messages.at(-1);
   const busy = last?.role === "assistant" && ["waiting", "thinking", "writing", "filling"].includes(last.state ?? "");
@@ -116,8 +125,9 @@ export function useAssistant(articleId: number, handlers: AssistantHandlers) {
           break;
         case "proposal": {
           // Har taklif shu paytgacha yig‘ilgan butun taklif: avvalgisi formada almashtiriladi
-          const applied = !undone.current.has(id) && latest.current.apply(id, event.v);
-          patch(id, { proposal: { value: event.v, dropped: event.dropped, applied } });
+          const wasUndone = undone.current.has(id);
+          const applied = !wasUndone && latest.current.apply(id, event.v);
+          patch(id, { proposal: { value: event.v, dropped: event.dropped, applied, undone: wasUndone } });
           break;
         }
         case "error":
@@ -165,11 +175,14 @@ export function useAssistant(articleId: number, handlers: AssistantHandlers) {
     const m = messages.find((x) => x.id === id);
     if (!m?.proposal) return;
     if (m.proposal.applied) {
-      latest.current.undo(id);
+      if (!latest.current.undo(id)) return;
       undone.current.add(id);
-    } else undone.current.delete(id);
-    const applied = m.proposal.applied ? false : latest.current.apply(id, m.proposal.value);
-    patch(id, { proposal: { ...m.proposal, applied } });
+      patch(id, { proposal: { ...m.proposal, applied: false, undone: true } });
+      return;
+    }
+    const applied = latest.current.apply(id, m.proposal.value);
+    if (applied) undone.current.delete(id);
+    patch(id, { proposal: { ...m.proposal, applied, undone: !applied && m.proposal.undone } });
   }
 
   function reset() {
@@ -177,7 +190,7 @@ export function useAssistant(articleId: number, handlers: AssistantHandlers) {
     setMessages([]);
   }
 
-  return { messages, busy, remaining, send, stop, toggle, reset };
+  return { messages, busy, remaining, text, setText, send, stop, toggle, reset };
 }
 
 export const fieldsOf = (p: AiProposal) => Object.keys(p) as AiField[];

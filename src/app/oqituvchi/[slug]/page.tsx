@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { ArticleList, type ArticleListEntry } from "@/components/article/article-list";
 import { OrcidIcon } from "@/components/orcid-icon";
 import { Avatar } from "@/components/profile/avatar";
+import { PublicFooter } from "@/components/public-footer";
 import { PublicHeader } from "@/components/public-header";
 import { JsonLd } from "@/components/seo/json-ld";
 import { SITE_NAME } from "@/lib/brand";
@@ -72,6 +73,7 @@ export default async function TeacherPage({ params }: Props) {
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6">
         <TeacherProfile {...data} />
       </main>
+      <PublicFooter />
     </>
   );
 }
@@ -97,6 +99,16 @@ function TeacherProfile({ p, works }: { p: PublicProfile; works: ArticleListEntr
           <p className="mt-3">
             <span className="text-muted">Ilmiy yo‘nalish:</span> {p.direction}
           </p>
+          {/* Scholar profilidagidek qiziqishlar sarlavha blokida; havola pillalaridan farqli ko‘rinishda */}
+          {p.keywords.length > 0 && (
+            <ul aria-label="Ilmiy qiziqishlar" className="mt-3 flex flex-wrap gap-2">
+              {p.keywords.map((k) => (
+                <li key={k} className="rounded-md bg-tile-soft px-2.5 py-0.5 text-sm">
+                  {k}
+                </li>
+              ))}
+            </ul>
+          )}
           <IdentityLinks p={p} />
         </div>
       </header>
@@ -110,28 +122,13 @@ function TeacherProfile({ p, works }: { p: PublicProfile; works: ArticleListEntr
         </section>
       )}
 
-      {p.keywords.length > 0 && (
-        <section aria-labelledby="keywords-title" className="mt-8">
-          <h2 id="keywords-title" className="font-serif text-xl font-semibold">
-            Ilmiy qiziqishlar
-          </h2>
-          <ul className="mt-3 flex flex-wrap gap-2">
-            {p.keywords.map((k) => (
-              <li key={k} className="rounded-full border border-line bg-paper px-3 py-1 text-sm">
-                {k}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
       <section aria-labelledby="works-title" className="mt-10">
         <h2 id="works-title" className="font-serif text-xl font-semibold">
           Maqolalar
         </h2>
         {works.length ? (
-          <div className="mt-3 max-w-3xl">
-            <ArticleList items={works} />
+          <div className="mt-4 max-w-3xl">
+            <ArticleList items={works} withYear />
           </div>
         ) : (
           <p className="mt-3 text-muted">Hali chop etilgan maqolalar yo‘q.</p>
@@ -168,10 +165,6 @@ function IdentityLinks({ p }: { p: PublicProfile }) {
       label: `Scopus: ${p.scopusAuthorId}`,
     });
   }
-  if (p.researcherId) items.push({ key: "wos", label: `Web of Science: ${p.researcherId}` });
-  if (p.researchgateUrl) items.push({ key: "rg", href: p.researchgateUrl, label: "ResearchGate" });
-  if (p.websiteUrl) items.push({ key: "web", href: p.websiteUrl, label: new URL(p.websiteUrl).hostname });
-  if (p.publicEmail) items.push({ key: "email", href: `mailto:${p.publicEmail}`, label: p.publicEmail });
   if (items.length === 0) return null;
 
   return (

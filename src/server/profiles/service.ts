@@ -18,11 +18,14 @@ export const PLACEHOLDER_SLUG = "__placeholder__";
 const profileTag = (slug: string) => `profile:${slug}`;
 /** Shu muallif ko‘rsatilgan barcha sahifalar (profil, maqolalar) */
 export const authorTag = (userId: string) => `author:${userId}`;
+/** Ochiq profillar ro‘yxati (/mualliflar, /yonalishlar) */
+export const TEACHERS_TAG = "teachers";
 
 function invalidate(userId: string, slug: string) {
   // Route handler’dan chaqiriladi, shuning uchun updateTag emas: darhol eskirtiramiz
   revalidateTag(profileTag(slug), { expire: 0 });
   revalidateTag(authorTag(userId), { expire: 0 });
+  revalidateTag(TEACHERS_TAG, { expire: 0 });
 }
 
 export async function getEditableProfile(userId: string) {
@@ -141,10 +144,8 @@ export async function getPublicProfile(slug: string) {
       orcidVerified: sql<boolean>`${users.orcidVerifiedAt} is not null`,
       slug: profiles.slug,
       patronymic: profiles.patronymic,
-      publishedName: profiles.publishedName,
       position: profiles.position,
       academicDegree: profiles.academicDegree,
-      academicTitle: profiles.academicTitle,
       institution: profiles.institution,
       department: profiles.department,
       direction: profiles.direction,
@@ -152,10 +153,6 @@ export async function getPublicProfile(slug: string) {
       keywords: profiles.keywords,
       googleScholarUrl: profiles.googleScholarUrl,
       scopusAuthorId: profiles.scopusAuthorId,
-      researcherId: profiles.researcherId,
-      researchgateUrl: profiles.researchgateUrl,
-      websiteUrl: profiles.websiteUrl,
-      publicEmail: profiles.publicEmail,
       photoKey: profiles.photoKey,
       createdAt: profiles.createdAt,
       updatedAt: profiles.updatedAt,

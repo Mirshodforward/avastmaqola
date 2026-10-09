@@ -12,6 +12,7 @@ import { AuthError } from "../auth/errors";
 import { db, type Db, type Tx } from "../db";
 import { articleAuthors, articles, profiles, users } from "../db/schema";
 import { deleteFile, saveFile } from "../storage";
+import { suggestIssuePlace } from "./issue";
 import type { DraftInput } from "./schemas";
 
 /** Qoralama, navbatdagi va tuzatishdagi maqolalar birgalikda: bitta akkaunt navbatni (va adminlar Telegram’ini) to‘ldira olmasin */
@@ -33,6 +34,8 @@ async function assertEditable(executor: Db | Tx, userId: string, id: number) {
 }
 
 export async function createDraft(userId: string): Promise<number> {
+  // "3-son, 12-maqola" o‘qituvchiga oldindan yozib qo‘yiladi: o‘zgartirishi mumkin, ko‘rib chiquvchi tasdiqlaydi
+  const place = await suggestIssuePlace();
   const [owner] = await db
     .select({
       firstName: users.firstName,
@@ -54,7 +57,7 @@ export async function createDraft(userId: string): Promise<number> {
       .where(and(eq(articles.userId, userId), ne(articles.status, "published")));
     if (open >= MAX_UNPUBLISHED) throw new AuthError("limit_reached");
 
-    const [row] = await tx.insert(articles).values({ userId }).returning({ id: articles.id });
+    const [row] = await tx.insert(articles).values({ userId, ...place }).returning({ id: articles.id });
     // Birinchi muallif — o‘qituvchining o‘zi (keyin tartibini o‘zgartirishi mumkin)
     await tx.insert(articleAuthors).values({
       articleId: row.id,
@@ -105,7 +108,6 @@ export function toFields({ article: a, authors }: OwnArticle): ArticleFields {
   return {
     lang: a.lang,
     license: a.license,
-    rightsConfirmed: a.rightsConfirmedAt !== null,
     hasPdf: a.pdfKey !== null,
     titleUz: a.titleUz ?? "",
     titleRu: a.titleRu ?? "",
@@ -116,6 +118,13 @@ export function toFields({ article: a, authors }: OwnArticle): ArticleFields {
     keywordsUz: a.keywordsUz,
     keywordsRu: a.keywordsRu,
     keywordsEn: a.keywordsEn,
+    venueType: a.venueType,
+    venue: a.venue ?? "",
+    volume: a.volume ?? "",
+    issue: a.issue ?? "",
+    pages: a.pages ?? "",
+    pubYear: a.pubYear,
+    doi: a.doi ?? "",
     authors: authors.map((x) => ({
       givenName: x.givenName,
       familyName: x.familyName,
@@ -127,14 +136,11 @@ export function toFields({ article: a, authors }: OwnArticle): ArticleFields {
 }
 
 export async function saveDraft(userId: string, id: number, input: DraftInput) {
-  const { authors, rightsConfirmed, ...fields } = input;
+  const { authors, ...fields } = input;
   await db.transaction(async (tx) => {
     const [updated] = await tx
       .update(articles)
-      .set({
-        ...fields,
-        rightsConfirmedAt: rightsConfirmed ? sql`coalesce(${articles.rightsConfirmedAt}, now())` : null,
-      })
+      .set(fields)
       .where(and(owned(userId, id), inArray(articles.status, editable)))
       .returning({ id: articles.id });
     if (!updated) {
@@ -191,7 +197,13 @@ export async function submitArticle(userId: string, id: number) {
 
     const [row] = await tx
       .update(articles)
-      .set({ status: "submitted", submittedAt: sql`now()`, reviewNote: null })
+      // Yuborishning o‘zi huquq tasdig‘i (alohida belgi yo‘q): vaqt birinchi yuborishda yoziladi
+      .set({
+        status: "submitted",
+        submittedAt: sql`now()`,
+        reviewNote: null,
+        rightsConfirmedAt: sql`coalesce(${articles.rightsConfirmedAt}, now())`,
+      })
       .where(and(owned(userId, id), inArray(articles.status, editable)))
       .returning({ id: articles.id });
     if (!row) throw new AuthError("state_conflict");

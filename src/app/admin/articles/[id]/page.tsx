@@ -8,6 +8,7 @@ import { ReviewPanel } from "@/components/article/review-panel";
 import { DashboardShell, DashboardSkeleton } from "@/components/dashboard/shell";
 import { ARTICLE_LIMITS } from "@/lib/article-rules";
 import { formatBytes } from "@/lib/format";
+import { issuePlaceStatus } from "@/server/articles/issue";
 import { parseArticleId } from "@/server/articles/schemas";
 import { articleUrl } from "@/server/articles/seo";
 import { loadArticleView } from "@/server/articles/view";
@@ -32,6 +33,7 @@ async function Review({ params }: Pick<Props, "params">) {
   // Hech qachon yuborilmagan qoralama faqat muallifniki ("Qoralama faqat sizga ko‘rinadi")
   const v = id ? await loadArticleView(id, false) : null;
   if (!v || v.status === "draft") notFound();
+  const place = await issuePlaceStatus(v.id, v.issueNo, v.issueSeq);
 
   return (
     <DashboardShell admin>
@@ -40,8 +42,8 @@ async function Review({ params }: Pick<Props, "params">) {
         ← Navbat
       </Link>
       <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        {/* min-w-0: maqola (mx-auto) telefonda uzun BibTeX qatori bilan sahifadan kengayib ketmasin */}
-        <div className="min-w-0">
+        {/* Telefonda maqola (mx-auto) uzun BibTeX qatori yoki bo‘linmas so‘z bilan sahifadan kengayib ketmasin */}
+        <div className="min-w-0 break-words">
           <ArticleView v={v} absoluteUrl={articleUrl(v.id)} preview={v.status !== "published"} />
         </div>
         <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
@@ -55,6 +57,8 @@ async function Review({ params }: Pick<Props, "params">) {
             id={v.id}
             status={v.status}
             submittedAt={v.submittedAt ? new Date(v.submittedAt).toISOString() : null}
+            place={{ issueNo: v.issueNo, issueSeq: v.issueSeq, ...place }}
+            zenodoDoi={v.zenodoDoi ?? null}
           />
         </aside>
       </div>

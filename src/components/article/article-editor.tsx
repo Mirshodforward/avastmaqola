@@ -1,34 +1,46 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Field } from "@/components/auth/field";
-import { Section, TextAreaField } from "@/components/profile/controls";
+import { TextAreaField } from "@/components/profile/controls";
 import type { AiDraft, AiProposal } from "@/lib/ai";
 import { sendForm, sendJson } from "@/lib/api-client";
 import {
   ARTICLE_LIMITS as L,
-  LICENSES,
-  LICENSE_INFO,
   articleProblems,
+  normalizeDoi,
   splitKeywords,
   type AuthorInput,
   type License,
   type Problem,
+  type VenueType,
 } from "@/lib/article-rules";
 import type { ApiError } from "@/lib/auth-types";
 import { formatBytes } from "@/lib/format";
 import { LANGS, LANG_LABELS, LANG_SUFFIX, type Lang } from "@/lib/langs";
 import type { ArticleView as View } from "@/server/articles/view";
-import { AiPanel, SparkIcon } from "./ai-panel";
+import { ACTIONS, AiPanel, SparkIcon } from "./ai-panel";
 import { ArticlePreview } from "./article-preview";
-import { useAssistant } from "./use-assistant";
+import type { IssueValues } from "./issue-fields";
+import { fieldsOf, useAssistant } from "./use-assistant";
 
 type TextKey = `${"title" | "abstract" | "keywords"}${"Uz" | "Ru" | "En"}`;
 
-/** Formadagi matnlar: kalit so‘zlar vergul bilan yoziladi, saqlashda ro‘yxatga aylanadi */
-export type EditorValues = { lang: Lang | ""; license: License; rightsConfirmed: boolean } & Record<TextKey, string>;
+/** Nashr ma’lumotlari (formada ko‘rsatilmaydi, saqlangan qiymat o‘zgarmay qaytadi): matn ko‘rinishida, server turga o‘giradi */
+export type PublicationValues = {
+  venueType: VenueType | "";
+  venue: string;
+  volume: string;
+  issue: string;
+  pages: string;
+  pubYear: string;
+  doi: string;
+};
+
+/** Formadagi matnlar: kalit so‘zlar vergul bilan yoziladi, saqlashda ro‘yxatga aylanadi. Son va raqam — yuborish oynasida */
+export type EditorValues = { lang: Lang | ""; license: License } & Record<TextKey, string> &
+  PublicationValues & IssueValues;
 
 type Errors = Partial<Record<string, string>>;
 /** Muallif qatori barqaror kalit bilan: tartib o‘zgarganda fokus o‘sha muallif bilan birga ko‘chadi */
@@ -36,6 +48,23 @@ type Row = AuthorInput & { uid: number };
 
 
 const langOf = (field: string) => LANGS.find((l) => field.split(".")[0].endsWith(LANG_SUFFIX[l]));
+
+/** Kamchilik qaysi bosqichga tegishli (0 — profil): hisoblagich, holat va ro‘yxat tartibi uchun; qoidalar o‘zgarmaydi */
+function stepOf(field: string) {
+  if (field === "pdf") return 1;
+  if (field === "lang" || field.startsWith("title")) return 2;
+  if (field.startsWith("authors")) return 3;
+  if (/^(abstract|keywords)/.test(field)) return 4;
+  return 0;
+}
+const byStep = (a: Problem, b: Problem) => stepOf(a.field) - stepOf(b.field);
+
+/** Til tanlovi: 44px balandlik, tanlangani chegara va fon bilan (qalinlik o‘zgarmaydi — matn sakramaydi) */
+const CHOICE =
+  "flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-line px-4 py-2 has-[:checked]:border-lapis has-[:checked]:bg-lapis/5";
+
+type StepState = "done" | "current" | "todo";
+type AiStep = "offer" | "working" | "pending" | "done";
 
 /** Oldindan ko‘rish uchun serverdan: maqoladagi muallif bloki va sahifa manzili */
 export type PreviewContext = {
@@ -45,8 +74,15 @@ export type PreviewContext = {
   absoluteUrl: string;
 };
 
-/** AI taklifi qo‘llanishidan oldingi qiymatlar: "Bekor qilish" ularni qaytaradi */
-type AiSnapshot = { values: Partial<EditorValues>; rows: Row[] | null };
+/**
+ * AI taklifi: qo‘llashdan oldingi va qo‘llangan qiymatlar. "Bekor qilish" faqat hali AI qiymati turgan maydonlarni
+ * qaytaradi — keyin o‘qituvchi yoki boshqa javob o‘zgartirgan maydonga tegilmaydi.
+ */
+type AiSnapshot = {
+  before: Partial<EditorValues>;
+  applied: Partial<EditorValues>;
+  rows: { before: Row[]; applied: Row[] } | null;
+};
 
 function payload(values: EditorValues, rows: Row[]) {
   return {
@@ -74,6 +110,7 @@ export function ArticleEditor({
   canDelete,
   ai,
   preview,
+  header,
 }: {
   id: number;
   initial: EditorValues;
@@ -85,6 +122,8 @@ export function ArticleEditor({
   /** AI yordamchi yoqilganmi (serverda API kalit bor) */
   ai: boolean;
   preview: PreviewContext;
+  /** Sahifa sarlavhasi: forma ustunining tepasida (AI ustuni sahifa boshidan boshlanadi) */
+  header: ReactNode;
 }) {
   const router = useRouter();
   const [values, setValues] = useState(initial);
@@ -95,14 +134,17 @@ export function ArticleEditor({
   const [pdfBytes, setPdfBytes] = useState(initialPdfBytes);
   const [tab, setTab] = useState<Lang>(initial.lang || "uz");
   const [errors, setErrors] = useState<Errors>({});
-  const [serverProblems, setServerProblems] = useState<Problem[] | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState<"save" | "submit" | "delete" | null>(null);
   const [uploading, setUploading] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  // Oxirgi PDF yuklangan paytdagi oxirgi xabar raqami: undan oldingi "to‘ldirish" so‘rovi eski PDF’niki
+  const [uploadMark, setUploadMark] = useState<number | null>(null);
   const aiDialog = useRef<HTMLDialogElement>(null);
+  const aiFocus = useRef<"input" | "close">("input");
+  const aiButton = useRef<HTMLButtonElement>(null);
   const aiSnapshots = useRef(new Map<number, AiSnapshot>());
   // PDF almashtirilayotganda yuborilsa, admin eski PDF’ni ko‘rardi — yuklash ham umumiy qulfga kiradi
   const blocked = busy !== null || uploading;
@@ -120,17 +162,34 @@ export function ArticleEditor({
       keywordsRu: body.keywordsRu,
       keywordsEn: body.keywordsEn,
       authors: body.authors,
+      hasProfile,
     }),
     apply: applyAi,
     undo: undoAi,
+  });
+  // onUploaded yuklash boshlangan render’dan chaqiriladi: belgi yuklash tugagan paytdagi oxirgi xabardan olinadi —
+  // shu orada yuborilgan so‘rov eski PDF’ni o‘qigan, yangi PDF’niki sanalmasin
+  const lastMessageId = useRef(0);
+  useEffect(() => {
+    lastMessageId.current = assistant.messages.at(-1)?.id ?? 0;
   });
 
   // Mobil ekranda AI yordamchi alohida oynada
   useEffect(() => {
     const d = aiDialog.current;
-    if (aiOpen && !d?.open) d?.showModal();
+    if (aiOpen && !d?.open) {
+      d?.showModal();
+      // Birinchi tugma («Yangi suhbat») emas: xabar maydoni, PDF kartasidan ochilganda esa ✕ fokuslansin
+      d?.querySelector<HTMLElement>(aiFocus.current === "close" ? '[aria-label="AI yordamchini yopish"]' : "textarea")?.focus();
+    }
     if (!aiOpen && d?.open) d.close();
   }, [aiOpen]);
+
+  /** AI oynasi (telefon): bar tugmasidan — xabar maydoniga, PDF kartasidan — ✕ ga (klaviatura jarayonni yopmasin) */
+  function openAi(focus: "input" | "close" = "input") {
+    aiFocus.current = focus;
+    setAiOpen(true);
+  }
 
   // Saqlanmagan matn bilan chiqishdan ogohlantirish: yopish/yangilash (beforeunload) va sayt ichidagi
   // havolalar — Next Link sahifani almashtirganda beforeunload ishlamaydi
@@ -140,6 +199,7 @@ export function ArticleEditor({
     const onClick = (e: MouseEvent) => {
       const link = e.target instanceof Element ? e.target.closest("a[href]") : null;
       if (!(link instanceof HTMLAnchorElement) || link.target === "_blank" || link.origin !== location.origin) return;
+      if (link.pathname === location.pathname && link.search === location.search && link.hash) return; // sahifa ichidagi bo‘lim
       if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; // yangi oynada ochish
       if (!window.confirm("Saqlanmagan o‘zgarishlar yo‘qoladi. Sahifadan chiqasizmi?")) {
         e.preventDefault();
@@ -157,15 +217,46 @@ export function ArticleEditor({
   const body = payload(values, rows);
   const problems: Problem[] = [
     ...(hasProfile ? [] : [{ field: "profile", message: "Avval profilingizni to‘ldiring" }]),
-    ...articleProblems({ ...body, lang: values.lang || null, hasPdf: pdfBytes !== null }),
-  ];
-  const shown = serverProblems ?? problems;
+    ...articleProblems({
+      ...body,
+      lang: values.lang || null,
+      hasPdf: pdfBytes !== null,
+      venueType: values.venueType || null,
+      pubYear: /^\d{4}$/.test(values.pubYear) ? Number(values.pubYear) : null,
+    }),
+  ].sort(byStep);
+  const hasContent = LANGS.some((l) => values[`title${LANG_SUFFIX[l]}`].trim() || values[`abstract${LANG_SUFFIX[l]}`].trim());
+
+  // PDF kartasidagi AI bosqichi: faqat "PDF asosida to‘ldirish" so‘rovi kuzatiladi (panel tugmasi ham aynan shu matnni
+  // yuboradi); PDF almashtirilgan bo‘lsa, undan oldingi so‘rov hisobga olinmaydi. To‘xtatilgan yoki chiqmagan
+  // to‘ldirish taklifda qoladi — blok (va undagi fokus) yo‘qolmaydi
+  const fillAt = assistant.messages.findLastIndex(
+    (m) => m.role === "user" && m.text === ACTIONS.fill.text && m.id > (uploadMark ?? -1),
+  );
+  const fill = fillAt < 0 ? undefined : assistant.messages[fillAt + 1];
+  const proposal = fill?.proposal && fieldsOf(fill.proposal.value).length > 0 ? fill.proposal : undefined;
+  const aiStep: AiStep | null =
+    !ai || pdfBytes === null || uploading
+      ? null
+      : fill && assistant.busy && fill === assistant.messages.at(-1)
+        ? "working"
+        : proposal && !proposal.applied && !proposal.undone
+          ? "pending"
+          : proposal?.applied
+            ? "done"
+            : uploadMark !== null || (!proposal && (fill !== undefined || !hasContent))
+              ? "offer"
+              : null;
+  const fillError =
+    aiStep === "offer" && fill && !proposal
+      ? (fill.error ??
+        (fill.state === "stopped" ? "To‘xtatildi." : "AI maydonlarni to‘ldirmadi — sababini AI yordamchi javobida o‘qing."))
+      : undefined;
 
   function touch(keys: string[]) {
     setErrors((e) => Object.fromEntries(Object.entries(e).filter(([k]) => !keys.includes(k))));
     setDirty(true);
     setNotice(null);
-    setServerProblems(null);
   }
 
   function update<K extends keyof EditorValues>(key: K, value: EditorValues[K]) {
@@ -228,47 +319,58 @@ export function ArticleEditor({
     requestAnimationFrame(() => document.querySelector<HTMLElement>(`[name="${name}"]`)?.focus());
   }
 
+  /** Shu javob qo‘llagan va hali o‘zgarmagan maydonlar AI’dan oldingi holatda (holat o‘rnatilmaydi, faqat hisoblanadi) */
+  function withoutAi(messageId: number) {
+    const s = aiSnapshots.current.get(messageId);
+    const restored: Record<string, unknown> = { ...values };
+    for (const [k, v] of Object.entries(s?.before ?? {})) {
+      if (values[k as keyof EditorValues] === s!.applied[k as keyof EditorValues]) restored[k] = v;
+    }
+    return { values: restored as EditorValues, rows: s?.rows && rows === s.rows.applied ? s.rows.before : rows };
+  }
+
   /**
-   * AI taklifini formaga qo‘llaydi. Bitta javob ichida taklif to‘ldirib boriladi: avvalgi qo‘llash
-   * shu yerda bekor qilinib, butun taklif qayta qo‘llanadi — "Bekor qilish" doim AI’dan oldingi holatga qaytaradi.
+   * AI taklifini formaga qo‘llaydi. Bitta javob ichida taklif to‘ldirib boriladi: avvalgi qo‘llash bekor qilinib,
+   * butun taklif qayta qo‘llanadi. Saqlash/yuborish paytida va yakuniy ko‘rinish ochiq turganda forma o‘zgarmaydi —
+   * taklif keyin "Formaga qo‘llash" tugmasi bilan qo‘llanadi.
    */
   function applyAi(messageId: number, p: AiProposal): boolean {
-    if (blocked) return false; // saqlash paytida forma qulf: taklif tugma bilan keyin qo‘llanadi
+    if (blocked || previewOpen || Object.keys(p).length === 0) return false;
     const { authors, ...fields } = p;
     const next: Partial<EditorValues> = Object.fromEntries(
+      // Kalit so‘zlar formada vergul bilan
       Object.entries(fields).map(([k, v]) => [k, Array.isArray(v) ? v.join(", ") : v]),
     );
-    const before = aiSnapshots.current.get(messageId);
-    const base = { ...values, ...before?.values };
-    const baseRows = before?.rows ?? rows;
+    const base = withoutAi(messageId);
+    const nextRows = authors ? authors.map(withUid) : base.rows;
     aiSnapshots.current.set(messageId, {
-      values: Object.fromEntries(Object.keys(next).map((k) => [k, base[k as keyof EditorValues]])),
-      rows: authors ? baseRows : null,
+      before: Object.fromEntries(Object.keys(next).map((k) => [k, base.values[k as keyof EditorValues]])),
+      applied: next,
+      rows: authors ? { before: base.rows, applied: nextRows } : null,
     });
-    setValues({ ...base, ...next });
+    setValues({ ...base.values, ...next });
     touch(Object.keys(next));
     // Mualliflar ro‘yxati butunlay almashadi (reorder qatorlarga bog‘langan eski xatolarni ham tozalaydi)
-    if (authors) reorder(authors.map(withUid));
-    else if (before?.rows) reorder(before.rows);
+    if (nextRows !== rows) reorder(nextRows);
+    // Belgi faqat karta kuzatayotgan to‘ldirish qo‘llanganda tushadi: boshqa javob eski PDF to‘ldirishini qaytarib ko‘rsatmasin
+    if (messageId === fill?.id) setUploadMark(null);
     return true;
   }
 
-  function undoAi(messageId: number) {
-    const before = aiSnapshots.current.get(messageId);
-    if (!before) return;
+  function undoAi(messageId: number): boolean {
+    const s = aiSnapshots.current.get(messageId);
+    if (blocked || !s) return false;
+    const base = withoutAi(messageId);
     aiSnapshots.current.delete(messageId);
-    setValues((v) => ({ ...v, ...before.values }));
-    touch(Object.keys(before.values));
-    if (before.rows) reorder(before.rows);
+    setValues(base.values);
+    touch(Object.keys(s.before));
+    if (base.rows !== rows) reorder(base.rows);
+    return true;
   }
 
   function showError(error: ApiError & { problems?: Problem[] }) {
-    setNotice({ ok: false, text: error.message });
-    if (error.problems) {
-      setServerProblems(error.problems);
-      // Ko‘rinish oynasi yopilgach (ochiq modal tashqarisiga fokus tushmaydi)
-      requestAnimationFrame(() => document.getElementById("checklist")?.focus());
-    }
+    // Yuborishda server topgan kamchiliklar (klient bilan farq qilsa) xabarning o‘zida ko‘rinadi
+    setNotice({ ok: false, text: error.problems?.length ? error.problems.map((p) => p.message).join(" · ") : error.message });
     // "keywordsRu.2" → keywordsRu; mualliflar maydoni esa qator bilan qoladi
     const raw = error.fieldErrors ?? (error.field ? { [error.field]: error.message } : {});
     const next: Errors = {};
@@ -296,6 +398,38 @@ export function ArticleEditor({
     setBusy(null);
   }
 
+  /** PDF darhol serverda saqlanadi: forma "saqlanmagan" bo‘lmaydi, eskirgan PDF kamchiliklari tozalanadi */
+  function onUploaded(bytes: number) {
+    setPdfBytes(bytes);
+    setErrors((e) => Object.fromEntries(Object.entries(e).filter(([k]) => k !== "pdf")));
+    setUploadMark(lastMessageId.current);
+  }
+
+  /** AI panelidagi "PDF faylni yuklash": karta ko‘rinadi, fokus PDF tugmasida, fayl tanlash oynasi shu bosishning o‘zida ochiladi */
+  function pickPdf() {
+    aiDialog.current?.close(); // yopilish fokusni ochgan tugmaga qaytaradi — undan keyin PDF tugmasiga o‘tkazamiz
+    const button = document.querySelector<HTMLButtonElement>('button[name="pdf"]');
+    document.getElementById("step-1")?.scrollIntoView({ block: "nearest" });
+    button?.focus({ preventScroll: true });
+    button?.click();
+  }
+
+  /** PDF kartasidagi asosiy AI tugmasi. Pulli so‘rov faqat shu bosishda ketadi — yuklashdan keyin o‘zi boshlanmaydi */
+  function onAiStep() {
+    if (aiStep === "done") return startReview();
+    if (aiStep === "pending") return assistant.toggle(fill!.id); // bepul: tayyor javob formaga qo‘llanadi
+    void assistant.send(ACTIONS.fill.text);
+    // Telefonda jarayon AI oynasida ko‘rinadi; fokus ✕ da — ekran klaviaturasi oqimni yopmasin
+    if (!matchMedia("(min-width: 64rem)").matches) openAi("close");
+  }
+
+  /** "Tekshirishni boshlash": 2-bosqich ekran tepasiga chiqadi, fokus o‘sha bo‘limga o‘tadi */
+  function startReview() {
+    const s = document.getElementById("step-2");
+    s?.scrollIntoView({ block: "start" });
+    s?.focus({ preventScroll: true });
+  }
+
   /** Yuborishdan oldin o‘qituvchi sahifaning yakuniy ko‘rinishini ko‘radi va tasdiqlaydi */
   function openPreview() {
     if (blocked) return;
@@ -307,11 +441,9 @@ export function ArticleEditor({
   async function submit() {
     if (blocked) return;
     setNotice(null);
-    setServerProblems(null);
     if (problems.length) {
-      setPreviewOpen(false);
-      setNotice({ ok: false, text: "Yuborishdan oldin ro‘yxatdagi kamchiliklarni tuzating." });
-      requestAnimationFrame(() => document.getElementById("checklist")?.focus());
+      setNotice({ ok: false, text: "Yuborishdan oldin kamchiliklarni tuzating." });
+      focusField(problems[0].field);
       return;
     }
     setBusy("submit");
@@ -340,6 +472,20 @@ export function ArticleEditor({
     keywords: { uz: body.keywordsUz, ru: body.keywordsRu, en: body.keywordsEn },
     license: values.license,
     pdfBytes,
+    publication:
+      values.venue.trim() || values.doi.trim()
+        ? {
+            type: values.venueType || null,
+            venue: values.venue.trim() || null,
+            volume: values.volume.trim() || null,
+            issue: values.issue.trim() || null,
+            pages: values.pages.trim() || null,
+            year: /^\d{4}$/.test(values.pubYear) ? Number(values.pubYear) : null,
+            doi: normalizeDoi(values.doi) ?? (values.doi.trim() || null),
+          }
+        : null,
+    issueNo: Number(values.issueNo) || 1,
+    issueSeq: Number(values.issueSeq) || null,
     submittedAt: null,
     publishedAt: null,
     updatedAt: new Date(preview.updatedAt),
@@ -375,321 +521,333 @@ export function ArticleEditor({
     onChange: (e: { target: { value: string } }) => update(key, e.target.value),
   });
 
+  // To‘ldirish tartibi: har bosqichda nechta narsa qolgani (yuborish tekshiruvi bilan bir xil qoidalar)
+  const left = (n: number) => problems.filter((p) => stepOf(p.field) === n).length;
+  // Maqola fayli birinchi; qolgani professional maqola tartibida: sarlavha → mualliflar → annotatsiya
+  const steps: StepInfo[] = [
+    { n: 1, href: "#step-1", title: "Maqola matni (PDF)", left: left(1) },
+    { n: 2, href: "#step-2", title: "Sarlavha", left: left(2) },
+    { n: 3, href: "#step-3", title: "Mualliflar va tashkilotlar", left: left(3) },
+    { n: 4, href: "#step-4", title: "Annotatsiya va kalit so‘zlar", left: left(4) },
+  ];
+  // Hozirgi qadam — birinchi chala bosqich (kabinetdagi yo‘l xaritasi kabi)
+  const next = steps.find((s) => s.left > 0);
+  const step = (n: number) => {
+    const s = steps[n - 1];
+    const state: StepState = s.left === 0 ? "done" : s === next ? "current" : "todo";
+    return { n, title: s.title, left: s.left, state };
+  };
+
   return (
-    <div className="mt-8 xl:grid xl:grid-cols-[minmax(0,1fr)_26rem] xl:items-start xl:gap-8 2xl:grid-cols-[minmax(0,1fr)_30rem]">
-    <div className="min-w-0 max-w-3xl space-y-6 xl:max-w-none">
+    // Chapda AI yordamchi (40%), o‘ngda maqola formasi (60%); kichik ekranda AI alohida oynada
+    <div className={ai ? "lg:grid lg:grid-cols-[minmax(22rem,2fr)_minmax(0,3fr)] lg:items-start lg:gap-8" : "max-w-4xl"}>
       {ai && (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-lapis/30 bg-paper p-4 xl:hidden">
-          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-lapis text-on-lapis">
-            <SparkIcon className="size-5" />
-          </span>
-          <p className="min-w-0 flex-1 text-sm">
-            <span className="font-medium">AI yordamchi</span> maqolangizni PDF yoki matndan uch tilda to‘ldirib beradi.
-          </p>
-          <button type="button" className="btn btn-primary" onClick={() => setAiOpen(true)}>
-            Ochish
-          </button>
-        </div>
+        <aside
+          aria-label="AI yordamchi"
+          className="hidden overflow-hidden rounded-xl border border-line bg-paper lg:sticky lg:top-4 lg:flex lg:h-[calc(100svh-7.5rem)] lg:flex-col"
+        >
+          {/* PDF almashtirilayotganda server hali eski faylni o‘qiydi — "PDF asosida to‘ldirish" taklif qilinmaydi */}
+          <AiPanel
+            assistant={assistant}
+            hasPdf={pdfBytes !== null && !uploading}
+            hasContent={hasContent}
+            onPreview={openPreview}
+            onFocusField={focusField}
+            onPickPdf={pickPdf}
+          />
+        </aside>
       )}
 
-      {reviewNote && (
-        <div className="rounded-xl border border-danger/40 bg-danger-soft p-5">
-          <p className="font-medium text-danger">Universitet izohi</p>
-          <p className="mt-1 whitespace-pre-line">{reviewNote}</p>
-          <p className="mt-2 text-sm text-muted">Tuzatib, maqolani qayta yuboring.</p>
-        </div>
-      )}
-
-      {/* Saqlash/yuborish paytida forma qulflanadi: shu orada yozilgan matn "saqlandi" deb belgilanmasin */}
-      <fieldset disabled={busy !== null} className="m-0 min-w-0 space-y-6 border-0 p-0">
-      <Section title="Til va mualliflar" description="Mualliflar maqola PDF faylidagi tartibda bo‘lsin.">
-        <fieldset className="sm:col-span-2">
-          <legend className="text-sm font-medium">Maqola (PDF) qaysi tilda yozilgan? *</legend>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {LANGS.map((l) => (
-              <label
-                key={l}
-                className="flex cursor-pointer items-center gap-2 rounded-lg border border-line px-3 py-2 has-[:checked]:border-lapis"
-              >
-                <input
-                  type="radio"
-                  name="lang"
-                  value={l}
-                  checked={values.lang === l}
-                  onChange={() => update("lang", l)}
-                  aria-describedby="lang-message"
-                  className="accent-[var(--lapis)]"
-                />
-                {LANG_LABELS[l]}
-              </label>
-            ))}
-          </div>
-          <p id="lang-message" className={`mt-1.5 text-sm ${errors.lang ? "text-danger" : "text-muted"}`}>
-            {errors.lang ?? "Shu tildagi sarlavha sahifaning asosiy sarlavhasi bo‘ladi."}
-          </p>
-        </fieldset>
-
-        <div className="space-y-4 sm:col-span-2">
-          {rows.map((a, i) => (
-            <fieldset key={a.uid} data-row={a.uid} className="rounded-lg border border-line p-4">
-              <legend className="px-1 text-sm font-medium">
-                {i + 1}-muallif{a.isMe ? " (siz)" : ""}
-              </legend>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field
-                  label="Familiya *"
-                  name={`authors.${i}.familyName`}
-                  value={a.familyName}
-                  error={errors[`authors.${i}.familyName`]}
-                  onChange={(e) => updateRow(i, { familyName: e.target.value })}
-                />
-                <Field
-                  label="Ism *"
-                  name={`authors.${i}.givenName`}
-                  value={a.givenName}
-                  error={errors[`authors.${i}.givenName`]}
-                  onChange={(e) => updateRow(i, { givenName: e.target.value })}
-                />
-                <Field
-                  label="Muassasa"
-                  name={`authors.${i}.institution`}
-                  value={a.institution}
-                  error={errors[`authors.${i}.institution`]}
-                  onChange={(e) => updateRow(i, { institution: e.target.value })}
-                />
-                <Field
-                  label="ORCID iD"
-                  name={`authors.${i}.orcid`}
-                  placeholder="0000-0000-0000-0000"
-                  spellCheck={false}
-                  value={a.orcid}
-                  error={errors[`authors.${i}.orcid`]}
-                  onChange={(e) => updateRow(i, { orcid: e.target.value })}
-                />
-              </div>
-              <div className="mt-3 flex flex-wrap gap-1 text-sm">
-                <button type="button" data-action="up" className="btn btn-ghost" disabled={i === 0} onClick={() => move(i, -1)}>
-                  ↑ Yuqoriga
-                </button>
-                <button
-                  type="button"
-                  data-action="down"
-                  className="btn btn-ghost"
-                  disabled={i === rows.length - 1}
-                  onClick={() => move(i, 1)}
-                >
-                  ↓ Pastga
-                </button>
-                {!a.isMe && (
-                  <button type="button" className="btn btn-ghost text-danger" onClick={() => removeRow(i)}>
-                    Olib tashlash
-                  </button>
-                )}
-              </div>
-            </fieldset>
-          ))}
-          {errors.authors && <p className="text-sm text-danger">{errors.authors}</p>}
-          {rows.length < L.authorsMax && (
-            <button type="button" className="btn btn-secondary" onClick={addRow}>
-              + Hammuallif qo‘shish
+      <div className="min-w-0 space-y-6 xl:space-y-8">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>{header}</div>
+          <div className="flex flex-wrap gap-2">
+            {canDelete && (
+              <button type="button" className="btn btn-ghost text-danger" aria-disabled={blocked} onClick={remove}>
+                Maqolani o‘chirish
+              </button>
+            )}
+            {/* Istalgan paytda: maqola sahifasi hozirgi (saqlanmagan) holatda qanday ko‘rinadi */}
+            <button type="button" className="btn btn-secondary" aria-haspopup="dialog" aria-disabled={blocked} onClick={openPreview}>
+              Ko‘rinishni ko‘rish
             </button>
-          )}
+          </div>
         </div>
-      </Section>
 
-      <section aria-labelledby="texts-title" className="rounded-xl border border-line bg-paper p-5 sm:p-6">
-        <h2 id="texts-title" className="font-serif text-lg font-semibold">
-          Sarlavha, annotatsiya va kalit so‘zlar
-        </h2>
-        <p className="mt-1 text-sm text-muted">
-          Uch tilda to‘ldiriladi. Maqolaning o‘zi bitta PDF — tarjima faqat shu uch qism uchun kerak.
-        </p>
-        <LangTabs tab={tab} onChange={setTab} main={values.lang} problems={problems} />
-        {LANGS.map((l) => {
-          const s = LANG_SUFFIX[l];
-          const main = values.lang && values.lang !== l ? values.lang : null;
-          return (
-            <div key={l} role="tabpanel" id={`panel-${l}`} aria-labelledby={`tab-${l}`} hidden={tab !== l} className="mt-5 space-y-5">
-              {main && (
-                <details open className="rounded-lg bg-mist p-4 text-sm">
-                  <summary className="cursor-pointer font-medium">Asosiy tildagi matn ({LANG_LABELS[main]})</summary>
-                  <p lang={main} className="mt-2 font-medium">
-                    {values[`title${LANG_SUFFIX[main]}`] || "—"}
-                  </p>
-                  <p lang={main} className="mt-2 whitespace-pre-line text-muted">
-                    {values[`abstract${LANG_SUFFIX[main]}`] || "—"}
-                  </p>
-                </details>
-              )}
+        {reviewNote && (
+          <div className="rounded-xl border border-danger/40 bg-danger-soft p-5">
+            <p className="font-medium text-danger">Universitet izohi</p>
+            <p className="mt-1 whitespace-pre-line">{reviewNote}</p>
+            <p className="mt-2 text-sm text-muted">Tuzatib, maqolani qayta yuboring.</p>
+          </div>
+        )}
+
+        {/* Saqlash/yuborish paytida forma qulflanadi: shu orada yozilgan matn "saqlandi" deb belgilanmasin.
+            PDF ham: admin eski faylni ko‘rmasin. m-0 yo‘q: u ustundagi oraliqni o‘chirib, oxirgi bosqichni pastdagi yopishqoq panelga yopishtirardi */}
+        <fieldset disabled={busy !== null} className="min-w-0 space-y-6 border-0 p-0 xl:space-y-8">
+          <Step
+            {...step(1)}
+            description={`Maqolaning to‘liq matni, 10 MB gacha.${ai ? " Yuklasangiz, AI yordamchi undan barcha maydonlarni to‘ldirib bera oladi." : ""}`}
+          >
+            <PdfField
+              id={id}
+              bytes={pdfBytes}
+              error={errors.pdf}
+              uploading={uploading}
+              locked={assistant.busy && pdfBytes !== null}
+              onUploading={setUploading}
+              onUploaded={onUploaded}
+            />
+            {aiStep && (
+              <AiFill
+                state={aiStep}
+                primary={problems.length > 0 && (aiStep !== "offer" || !hasContent)}
+                disabled={aiStep === "working" || (aiStep === "offer" && (assistant.busy || assistant.remaining === 0))}
+                replaces={hasContent}
+                fields={proposal ? fieldsOf(proposal.value).length : 0}
+                error={fillError}
+                noneLeft={assistant.remaining === 0}
+                onMain={onAiStep}
+                onStop={assistant.stop}
+              />
+            )}
+          </Step>
+
+          <StepNav steps={steps} />
+
+          <Step
+            {...step(2)}
+            chip
+            focusable
+            description="Maqola qaysi tilda yozilgani va sarlavhasi — uch tilda. Asosiy tildagi sarlavha PDF’dagi bilan bir xil bo‘lsin."
+          >
+            <fieldset className="sm:col-span-2">
+              <legend className="text-sm font-medium">Maqola (PDF) qaysi tilda yozilgan? *</legend>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {LANGS.map((l) => (
+                  <label key={l} className={CHOICE}>
+                    <input
+                      type="radio"
+                      name="lang"
+                      value={l}
+                      checked={values.lang === l}
+                      onChange={() => update("lang", l)}
+                      aria-describedby="lang-message"
+                      className="size-4 accent-[var(--lapis)]"
+                    />
+                    <span lang={l}>{LANG_LABELS[l]}</span>
+                  </label>
+                ))}
+              </div>
+              <p id="lang-message" className={`mt-1.5 text-sm ${errors.lang ? "text-danger" : "text-muted"}`}>
+                {errors.lang ?? "Shu tildagi sarlavha sahifaning asosiy sarlavhasi bo‘ladi."}
+              </p>
+            </fieldset>
+
+            {LANGS.map((l) => (
               <TextAreaField
-                label={`Sarlavha (${LANG_LABELS[l]}) *`}
+                key={l}
+                label={`Sarlavha (${LANG_LABELS[l]})${values.lang === l ? " · asosiy" : ""} *`}
                 lang={l}
                 rows={2}
                 maxLength={L.titleMax}
                 className="input mt-1.5 min-h-0"
-                {...text(`title${s}`)}
+                {...text(`title${LANG_SUFFIX[l]}`)}
               />
-              <TextAreaField
-                label={`Annotatsiya (${LANG_LABELS[l]}) *`}
-                lang={l}
-                rows={9}
-                maxLength={L.abstractMax}
-                hint={`${values[`abstract${s}`].trim().length}/${L.abstractMax} belgi, kamida ${L.abstractMin}.`}
-                {...text(`abstract${s}`)}
-              />
-              <Field
-                label={`Kalit so‘zlar (${LANG_LABELS[l]}) *`}
-                lang={l}
-                hint={`Vergul bilan ajrating: ${L.keywordsMin}–${L.keywordsMax} ta. Hozir: ${splitKeywords(values[`keywords${s}`]).length}.`}
-                {...text(`keywords${s}`)}
-              />
-            </div>
-          );
-        })}
-      </section>
-
-      <PdfField
-        id={id}
-        bytes={pdfBytes}
-        error={errors.pdf}
-        uploading={uploading}
-        onUploading={setUploading}
-        onUploaded={setPdfBytes}
-      />
-
-      <Section title="Litsenziya va huquq">
-        <fieldset className="sm:col-span-2">
-          <legend className="text-sm font-medium">Litsenziya</legend>
-          {LICENSES.map((lic) => (
-            <label key={lic} className="mt-2 flex cursor-pointer items-start gap-3">
-              <input
-                type="radio"
-                name="license"
-                checked={values.license === lic}
-                onChange={() => update("license", lic)}
-                className="mt-1 accent-[var(--lapis)]"
-              />
-              <span>
-                <span className="font-medium">{LICENSE_INFO[lic].label}</span>
-                <span className="block text-sm text-muted">{LICENSE_INFO[lic].hint}</span>
-              </span>
-            </label>
-          ))}
-        </fieldset>
-        <label className="flex items-start gap-3 sm:col-span-2">
-          <input
-            type="checkbox"
-            name="rightsConfirmed"
-            checked={values.rightsConfirmed}
-            onChange={(e) => update("rightsConfirmed", e.target.checked)}
-            aria-invalid={errors.rightsConfirmed ? true : undefined}
-            className="mt-1 size-4 accent-[var(--lapis)]"
-          />
-          <span>
-            <span className="font-medium">Maqolani bu yerda ochiq joylashga huquqim bor</span>
-            <span className="block text-sm text-muted">
-              Men maqola mualliflaridan biriman, hammualliflar rozi. Maqola jurnalda chiqqan bo‘lsa, jurnal qoidasi
-              ochiq nusxa joylashga ruxsat beradi.
-            </span>
-          </span>
-        </label>
-      </Section>
-      </fieldset>
-
-      <section
-        id="checklist"
-        tabIndex={-1}
-        aria-labelledby="checklist-title"
-        className="rounded-xl border border-line bg-paper p-5 outline-none sm:p-6"
-      >
-        <h2 id="checklist-title" className="font-serif text-lg font-semibold">
-          Yuborishdan oldin
-        </h2>
-        {shown.length === 0 ? (
-          <p className="mt-2 text-sm text-tile">Hammasi tayyor: maqolani ko‘rib chiqishga yuborishingiz mumkin.</p>
-        ) : (
-          <ul className="mt-3 space-y-1.5 text-sm">
-            {shown.map((p) => (
-              <li key={`${p.field}:${p.message}`} className="flex gap-2">
-                <span aria-hidden="true" className="text-danger">
-                  •
-                </span>
-                {p.field === "profile" ? (
-                  <Link href="/dashboard/profile" className="link">
-                    {p.message}
-                  </Link>
-                ) : (
-                  <button type="button" className="link text-left" onClick={() => focusField(p.field)}>
-                    {p.message}
-                  </button>
-                )}
-              </li>
             ))}
-          </ul>
-        )}
-      </section>
+          </Step>
 
-      <div className="sticky bottom-0 -mx-4 flex flex-wrap items-center gap-3 border-t border-line bg-mist/95 px-4 py-4 backdrop-blur sm:mx-0 sm:rounded-xl sm:border sm:bg-paper/95">
-        {/* disabled emas, aria-disabled: bosilgan tugma o‘chib qolsa klaviatura fokusi yo‘qoladi */}
-        <button type="button" className="btn btn-secondary" aria-disabled={blocked} onClick={save}>
-          {busy === "save" ? "Saqlanmoqda…" : "Saqlash"}
-        </button>
-        <button type="button" className="btn btn-primary" aria-disabled={blocked} onClick={openPreview}>
-          {busy === "submit" ? "Yuborilmoqda…" : uploading ? "PDF yuklanmoqda…" : "Ko‘rish va yuborish"}
-        </button>
-        {ai && (
-          <button type="button" className="btn btn-ghost xl:hidden" onClick={() => setAiOpen(true)}>
-            <SparkIcon /> AI yordamchi
+          <Step {...step(3)} chip description="Maqoladagi tartibda: har bir muallif va u ishlaydigan tashkilot.">
+            <div className="space-y-4 sm:col-span-2">
+              {rows.map((a, i) => (
+                <fieldset key={a.uid} data-row={a.uid} className="rounded-lg border border-line p-4">
+                  <legend className="px-1 text-sm font-medium">
+                    {i + 1}-muallif{a.isMe ? " (siz)" : ""}
+                  </legend>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field
+                      label="Familiya *"
+                      name={`authors.${i}.familyName`}
+                      value={a.familyName}
+                      error={errors[`authors.${i}.familyName`]}
+                      onChange={(e) => updateRow(i, { familyName: e.target.value })}
+                    />
+                    <Field
+                      label="Ism *"
+                      name={`authors.${i}.givenName`}
+                      value={a.givenName}
+                      error={errors[`authors.${i}.givenName`]}
+                      onChange={(e) => updateRow(i, { givenName: e.target.value })}
+                    />
+                    <Field
+                      label="Muassasa"
+                      name={`authors.${i}.institution`}
+                      value={a.institution}
+                      error={errors[`authors.${i}.institution`]}
+                      onChange={(e) => updateRow(i, { institution: e.target.value })}
+                    />
+                    <Field
+                      label="ORCID iD"
+                      name={`authors.${i}.orcid`}
+                      placeholder="0000-0000-0000-0000"
+                      spellCheck={false}
+                      value={a.orcid}
+                      error={errors[`authors.${i}.orcid`]}
+                      onChange={(e) => updateRow(i, { orcid: e.target.value })}
+                    />
+                  </div>
+                  {/* Yagona muallifda tartib tugmalari kerak emas (ikkalasi ham o‘chiq turardi) */}
+                  {rows.length > 1 && (
+                    <div className="mt-3 flex flex-wrap gap-1 text-sm">
+                      <button type="button" data-action="up" className="btn btn-ghost" disabled={i === 0} onClick={() => move(i, -1)}>
+                        ↑ Yuqoriga
+                      </button>
+                      <button
+                        type="button"
+                        data-action="down"
+                        className="btn btn-ghost"
+                        disabled={i === rows.length - 1}
+                        onClick={() => move(i, 1)}
+                      >
+                        ↓ Pastga
+                      </button>
+                      {!a.isMe && (
+                        <button type="button" className="btn btn-ghost text-danger" onClick={() => removeRow(i)}>
+                          Olib tashlash
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </fieldset>
+              ))}
+              {errors.authors && <p className="text-sm text-danger">{errors.authors}</p>}
+              {rows.length < L.authorsMax && (
+                <button type="button" className="btn btn-secondary" onClick={addRow}>
+                  + Hammuallif qo‘shish
+                </button>
+              )}
+            </div>
+          </Step>
+
+          <Step
+            {...step(4)}
+            chip
+            description="Uch tilda: o‘zbek, rus va ingliz. Maqolaning o‘zi bitta PDF — tarjima faqat shu qismlar uchun kerak."
+          >
+            <LangTabs tab={tab} onChange={setTab} main={values.lang} problems={problems.filter((p) => /^(abstract|keywords)/.test(p.field))} />
+            {LANGS.map((l) => {
+              const s = LANG_SUFFIX[l];
+              const main = values.lang && values.lang !== l ? values.lang : null;
+              return (
+                <div key={l} role="tabpanel" id={`panel-${l}`} aria-labelledby={`tab-${l}`} hidden={tab !== l} className="mt-5 space-y-5">
+                  {main && (
+                    <details open className="rounded-lg bg-mist p-4 text-sm">
+                      <summary className="cursor-pointer font-medium">Asosiy tildagi annotatsiya ({LANG_LABELS[main]})</summary>
+                      <p lang={main} className="mt-2 whitespace-pre-line text-muted">
+                        {values[`abstract${LANG_SUFFIX[main]}`] || "—"}
+                      </p>
+                    </details>
+                  )}
+                  <TextAreaField
+                    label={`Annotatsiya (${LANG_LABELS[l]}) *`}
+                    lang={l}
+                    rows={9}
+                    maxLength={L.abstractMax}
+                    hint={`${values[`abstract${s}`].trim().length}/${L.abstractMax} belgi, kamida ${L.abstractMin}.`}
+                    {...text(`abstract${s}`)}
+                  />
+                  <Field
+                    label={`Kalit so‘zlar (${LANG_LABELS[l]}) *`}
+                    lang={l}
+                    hint={`Vergul bilan ajrating: ${L.keywordsMin}–${L.keywordsMax} ta. Hozir: ${splitKeywords(values[`keywords${s}`]).length}.`}
+                    {...text(`keywords${s}`)}
+                  />
+                </div>
+              );
+            })}
+          </Step>
+
+        </fieldset>
+
+        <div className="sticky bottom-0 -mx-4 flex flex-wrap items-center gap-3 border-t border-line bg-mist/95 px-4 py-4 backdrop-blur sm:mx-0 sm:rounded-xl sm:border sm:bg-paper/95">
+          {/* disabled emas, aria-disabled: bosilgan tugma o‘chib qolsa klaviatura fokusi yo‘qoladi */}
+          <button type="button" className="btn btn-secondary" aria-disabled={blocked} onClick={save}>
+            {busy === "save" ? "Saqlanmoqda…" : "Saqlash"}
           </button>
-        )}
-        {canDelete && (
-          <button type="button" className="btn btn-ghost text-danger" aria-disabled={blocked} onClick={remove}>
-            O‘chirish
+          {/* Ko‘k (asosiy) rang — maqola yuborishga tayyor bo‘lganda; ungacha 1-bosqichdagi yuklash asosiy harakat */}
+          <button
+            type="button"
+            className={`btn ${problems.length ? "btn-secondary" : "btn-primary"}`}
+            aria-disabled={blocked}
+            aria-haspopup="dialog"
+            onClick={openPreview}
+          >
+            {busy === "submit" ? "Yuborilmoqda…" : uploading ? "PDF yuklanmoqda…" : "Ko‘rish va yuborish"}
           </button>
-        )}
-        <p role="status" className={`text-sm ${notice?.ok ? "font-medium text-tile" : "text-danger"}`}>
-          {notice?.text}
-        </p>
-        {dirty && !notice && <p className="text-sm text-muted">Saqlanmagan o‘zgarishlar bor.</p>}
+          {ai && (
+            <button
+              ref={aiButton}
+              type="button"
+              className="btn btn-ghost lg:hidden"
+              aria-haspopup="dialog"
+              aria-label={assistant.busy ? "AI yordamchini ochish — yozmoqda" : "AI yordamchini ochish"}
+              onClick={() => openAi()}
+            >
+              <SparkIcon />
+              <span className="max-sm:hidden">AI yordamchi</span>
+              <span className="sm:hidden">AI</span>
+              {assistant.busy && <span className="text-xs text-muted">yozmoqda…</span>}
+            </button>
+          )}
+          <p role="status" className={`text-sm ${notice?.ok ? "font-medium text-tile" : "text-danger"}`}>
+            {notice?.text}
+          </p>
+          {dirty && !notice && <p className="text-sm text-muted">Saqlanmagan o‘zgarishlar bor.</p>}
+        </div>
       </div>
-    </div>
 
-    {ai && (
-      <aside
-        aria-label="AI yordamchi"
-        className="hidden overflow-hidden rounded-xl border border-line bg-paper xl:sticky xl:top-4 xl:flex xl:h-[calc(100svh-2rem)] xl:flex-col"
-      >
-        <AiPanel assistant={assistant} hasPdf={pdfBytes !== null} onPreview={openPreview} onFocusField={focusField} />
-      </aside>
-    )}
-    {ai && (
-      <dialog
-        ref={aiDialog}
-        onClose={() => setAiOpen(false)}
-        aria-label="AI yordamchi"
-        className="m-0 ml-auto h-dvh max-h-none w-full max-w-md bg-paper p-0 text-ink backdrop:bg-ink/50 sm:border-l sm:border-line"
-      >
-        {aiOpen && (
-          <AiPanel
-            assistant={assistant}
-            hasPdf={pdfBytes !== null}
-            onPreview={openPreview}
-            onFocusField={focusField}
-            onClose={() => setAiOpen(false)}
-          />
-        )}
-      </dialog>
-    )}
-    <ArticlePreview
-      open={previewOpen}
-      view={previewView}
-      absoluteUrl={preview.absoluteUrl}
-      problems={problems}
-      submitting={busy === "submit"}
-      onClose={() => setPreviewOpen(false)}
-      onSubmit={submit}
-      onFix={focusField}
-    />
+      {ai && (
+        <dialog
+          ref={aiDialog}
+          onClose={() => {
+            setAiOpen(false);
+            // Ochgan tugma yo‘qolgan bo‘lsa, fokus sahifa boshiga tushib qolmasin
+            requestAnimationFrame(() => {
+              if (!document.activeElement || document.activeElement === document.body) aiButton.current?.focus();
+            });
+          }}
+          aria-label="AI yordamchi"
+          className="m-0 ml-auto h-dvh max-h-none w-full max-w-md bg-paper p-0 text-ink backdrop:bg-ink/50 sm:border-l sm:border-line"
+        >
+          {aiOpen && (
+            <AiPanel
+              assistant={assistant}
+              hasPdf={pdfBytes !== null && !uploading}
+              hasContent={hasContent}
+              onPreview={openPreview}
+              onFocusField={focusField}
+              onPickPdf={pickPdf}
+              onClose={() => setAiOpen(false)}
+            />
+          )}
+        </dialog>
+      )}
+      <ArticlePreview
+        open={previewOpen}
+        view={previewView}
+        absoluteUrl={preview.absoluteUrl}
+        problems={problems}
+        issue={{ issueNo: values.issueNo, issueSeq: values.issueSeq }}
+        submitting={busy === "submit"}
+        aiBusy={assistant.busy}
+        onClose={() => setPreviewOpen(false)}
+        onSubmit={submit}
+        onFix={focusField}
+        onIssueChange={(next) => {
+          setValues((v) => ({ ...v, ...next }));
+          touch(["issueNo", "issueSeq"]);
+        }}
+      />
     </div>
   );
 }
@@ -726,13 +884,13 @@ function LangTabs({ tab, onChange, main, problems }: { tab: Lang; onChange: (l: 
             tabIndex={tab === l ? 0 : -1}
             onClick={() => onChange(l)}
             onKeyDown={onKeyDown}
-            className={`-mb-px shrink-0 border-b-2 px-4 py-2.5 text-left ${tab === l ? "border-lapis" : "border-transparent hover:border-line"}`}
+            className={`-mb-px shrink-0 border-b-2 px-3 py-2.5 text-left sm:px-4 ${tab === l ? "border-lapis" : "border-transparent hover:border-line"}`}
           >
             <span className="block font-medium">
               {LANG_LABELS[l]}
               {main === l && <span className="ml-1.5 text-xs font-normal text-muted">asosiy</span>}
             </span>
-            <span className={`block text-xs ${left ? "text-muted" : "text-tile"}`}>{left ? `${left} ta kamchilik` : "tayyor"}</span>
+            <span className={`block text-xs ${left ? "text-muted" : "text-tile"}`}>{left ? `${left} ta qoldi` : "tayyor"}</span>
           </button>
         );
       })}
@@ -746,6 +904,7 @@ function PdfField({
   bytes,
   error,
   uploading,
+  locked,
   onUploading,
   onUploaded,
 }: {
@@ -753,12 +912,15 @@ function PdfField({
   bytes: number | null;
   error?: string;
   uploading: boolean;
+  /** AI javob yozmoqda: server har so‘rovga saqlangan PDF’ni qo‘shadi — shu payt almashtirib bo‘lmaydi */
+  locked: boolean;
   onUploading: (value: boolean) => void;
   onUploaded: (bytes: number) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const message = uploadError ?? error;
+  const describedBy = [bytes === null && "pdf-hint", message && "pdf-error"].filter(Boolean).join(" ") || undefined;
 
   async function upload(file: File) {
     if (file.size > L.pdfMaxBytes) {
@@ -775,27 +937,49 @@ function PdfField({
     else setUploadError(res.error.message);
   }
 
+  // Barcha holatda bitta tuzilma: o‘sha tugma (va klaviatura fokusi) yuklash davomida ham o‘z joyida qoladi
   return (
-    <Section title="PDF fayl" description="Maqolaning to‘liq matni, 10 MB gacha. Fayl darhol saqlanadi.">
-      <div className="space-y-3 sm:col-span-2">
-        {bytes ? (
-          <p className="text-sm">
-            Yuklangan: {formatBytes(bytes)} ·{" "}
-            <a href={`/maqola/${id}/pdf`} className="link" target="_blank" rel="noopener">
-              Ko‘rish
-            </a>
+    <>
+      <div
+        className={`flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl border border-line p-4 sm:p-5 ${bytes === null && !uploading ? "bg-mist" : "bg-paper"}`}
+      >
+        <span
+          aria-hidden="true"
+          className={`grid size-12 shrink-0 place-items-center rounded-lg text-xs font-bold ${bytes ? "bg-tile-soft text-tile" : "bg-paper text-muted ring-1 ring-line"} ${uploading ? "animate-pulse motion-reduce:animate-none" : ""}`}
+        >
+          PDF
+        </span>
+        <div className="min-w-[10rem] flex-1">
+          <p role="status" className="font-medium">
+            {uploading ? "PDF yuklanmoqda…" : bytes ? "PDF yuklandi va saqlandi" : "Fayl hali yuklanmagan"}
           </p>
-        ) : (
-          <p className="text-sm text-muted">Hali yuklanmagan.</p>
-        )}
-        {bytes !== null && bytes > L.pdfScholarBytes && (
-          <p className="text-sm text-muted">
-            Fayl 5 MB dan katta: Google Scholar katta PDF’larni o‘qimasligi mumkin. Imkon bo‘lsa, siqilgan nusxasini
-            yuklang.
-          </p>
-        )}
-        <button type="button" name="pdf" className="btn btn-secondary" disabled={uploading} onClick={() => input.current?.click()}>
-          {uploading ? "Yuklanmoqda…" : bytes ? "PDF’ni almashtirish" : "PDF yuklash"}
+          {uploading ? (
+            <p className="text-sm text-muted">Sahifani yopmang.</p>
+          ) : bytes ? (
+            <p className="text-sm text-muted">
+              {formatBytes(bytes)} ·{" "}
+              <a href={`/maqola/${id}/pdf`} className="link" target="_blank" rel="noopener">
+                Ko‘rish<span className="sr-only"> (yangi oynada)</span>
+              </a>
+            </p>
+          ) : (
+            <p id="pdf-hint" className="text-sm text-muted">
+              Maqola Word’da bo‘lsa, avval uni PDF qilib saqlang.
+            </p>
+          )}
+        </div>
+        {/* disabled emas, aria-disabled: yuklash paytida fokus tushib qolmasin; pickPdf’ning .click()i ham shu shartdan o‘tadi */}
+        <button
+          type="button"
+          name="pdf"
+          aria-disabled={uploading || locked || undefined}
+          aria-describedby={describedBy}
+          className={`btn ${bytes ? "btn-secondary" : "btn-primary btn-lg w-full sm:w-auto"}`}
+          onClick={() => {
+            if (!uploading && !locked) input.current?.click();
+          }}
+        >
+          {uploading ? "Yuklanmoqda…" : bytes ? "Almashtirish" : "PDF faylni yuklash"}
         </button>
         <input
           ref={input}
@@ -808,12 +992,231 @@ function PdfField({
             e.target.value = "";
           }}
         />
-        {message && (
-          <p role="alert" className="text-sm text-danger">
-            {message}
-          </p>
+      </div>
+      {bytes !== null && bytes > L.pdfScholarBytes && (
+        <p className="text-sm text-muted">
+          Fayl 5 MB dan katta: Google Scholar katta PDF’larni o‘qimasligi mumkin. Imkon bo‘lsa, siqilgan nusxasini yuklang.
+        </p>
+      )}
+      {message && (
+        <p id="pdf-error" role="alert" className="text-sm text-danger">
+          {message}
+        </p>
+      )}
+    </>
+  );
+}
+
+/** PDF kartasidagi AI bloki: taklif → yozmoqda → (qo‘llanmagan) → tayyor. Asosiy tugma doim bitta element — fokus saqlanadi */
+function AiFill({
+  state,
+  primary,
+  disabled,
+  replaces,
+  fields,
+  error,
+  noneLeft,
+  onMain,
+  onStop,
+}: {
+  state: AiStep;
+  /** Ko‘k faqat asosiy qadam bo‘lsa: pulli taklif — bo‘sh formada, «Tekshirishni boshlash» — kamchilik qolganda */
+  primary: boolean;
+  disabled: boolean;
+  /** Formada matn bor: to‘ldirish uni almashtirishi mumkin */
+  replaces: boolean;
+  fields: number;
+  error?: string;
+  noneLeft: boolean;
+  onMain: () => void;
+  onStop: () => void;
+}) {
+  const main = useRef<HTMLButtonElement>(null);
+  const title = {
+    offer: "AI maydonlarni to‘ldirib bersinmi?",
+    working: "AI maqolani o‘qib, maydonlarni to‘ldirmoqda…",
+    pending: "AI javobi tayyor, lekin formaga hali qo‘llanmagan",
+    done: `AI ${fields} ta maydonni to‘ldirdi`,
+  }[state];
+  const label = {
+    offer: error ? "Qayta urinish" : ACTIONS.fill.label,
+    working: "To‘ldirilmoqda…",
+    pending: "Formaga qo‘llash",
+    done: "Tekshirishni boshlash",
+  }[state];
+
+  return (
+    <div className="rounded-xl border border-lapis/30 bg-lapis/5 p-4 sm:p-5">
+      <p className="font-medium">{title}</p>
+      <p className="mt-1 text-sm text-muted">
+        {state === "offer" && (
+          <>
+            PDF’dan sarlavha, mualliflar, annotatsiya va kalit so‘zlar uch tilda yoziladi.
+            {replaces && " Formadagi hozirgi matnlar almashtirilishi mumkin."} Keyin tekshirib, «Saqlash»ni bosasiz.
+          </>
+        )}
+        {state === "working" && (
+          <>
+            Bu bir necha daqiqa olishi mumkin. Sahifadan chiqmang.
+            <span className="max-lg:hidden"> Jarayon chapdagi AI oynasida ko‘rinadi.</span>
+          </>
+        )}
+        {state === "pending" && "Tugmani bossangiz, AI yozgan matnlar maydonlarga qo‘yiladi. Yangi so‘rov yuborilmaydi."}
+        {state === "done" && "Endi har bir bo‘limni tekshirib chiqing — AI ham xato qilishi mumkin."}
+      </p>
+      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <button
+          ref={main}
+          type="button"
+          aria-disabled={disabled || undefined}
+          aria-describedby={state === "offer" ? "ai-fill-note" : undefined}
+          className={`btn btn-lg w-full sm:w-auto ${primary ? "btn-primary" : "btn-secondary"}`}
+          onClick={() => !disabled && onMain()}
+        >
+          {(state === "offer" || state === "working") && (
+            <SparkIcon className={`size-5 ${state === "working" ? "animate-pulse motion-reduce:animate-none" : ""}`} />
+          )}
+          {label}
+        </button>
+        {state === "working" && (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => {
+              onStop();
+              main.current?.focus();
+            }}
+          >
+            To‘xtatish
+          </button>
+        )}
+        {state === "offer" && (
+          <a href="#step-2" className="link text-sm">
+            yoki maydonlarni o‘zingiz to‘ldiring
+          </a>
         )}
       </div>
-    </Section>
+      {state === "offer" && (
+        <p id="ai-fill-note" className="mt-3 text-xs text-muted">
+          {noneLeft
+            ? "Bugungi AI so‘rovlari tugadi — maydonlarni o‘zingiz to‘ldiring yoki ertaga urinib ko‘ring."
+            : "PDF tahlil uchun Claude (Anthropic) xizmatiga yuboriladi."}
+        </p>
+      )}
+      {/* Telefonda (AI oynasi yopiq bo‘lsa) holat e’lon qilinadi; kompyuterda chapdagi panel e’lon qiladi */}
+      <p role="status" className="sr-only lg:hidden">
+        {title}
+      </p>
+    </div>
+  );
+}
+
+type StepInfo = { n: number; href: string; title: string; left: number };
+
+/** Kabinetdagi yo‘l xaritasi bilan bir xil: ✓ — tayyor, ko‘k halqa — hozirgi qadam, chiziq — keyingilari */
+function StepBadge({ n, state }: { n: number; state: StepState }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`grid size-9 shrink-0 place-items-center rounded-full text-sm font-semibold ${
+        state === "done"
+          ? "bg-tile text-paper"
+          : state === "current"
+            ? "bg-lapis text-on-lapis ring-4 ring-lapis/15"
+            : "border border-line text-muted"
+      }`}
+    >
+      {state === "done" ? "✓" : n}
+    </span>
+  );
+}
+
+/** To‘ldirish tartibidagi bosqich: raqam (tayyor bo‘lsa ✓), sarlavha, holat va qisqa izoh */
+function Step({
+  n,
+  id = `step-${n}`,
+  title,
+  description,
+  state,
+  left = 0,
+  chip = false,
+  optional = false,
+  focusable = false,
+  children,
+}: {
+  n: number;
+  id?: string;
+  title: string;
+  description?: string;
+  state: StepState;
+  left?: number;
+  /** Sarlavha yonida "N ta qoldi" / "Tayyor" / "Ixtiyoriy" (PDF va yuborish bosqichlarida holatni o‘zi aytadi) */
+  chip?: boolean;
+  optional?: boolean;
+  /** Xato bo‘lganda fokus shu bo‘limga ko‘chadi */
+  focusable?: boolean;
+  children: ReactNode;
+}) {
+  const status = chip ? (left ? `${left} ta qoldi` : optional ? "Ixtiyoriy" : "Tayyor") : state === "done" ? "Tayyor" : null;
+  return (
+    <section
+      id={id}
+      tabIndex={focusable ? -1 : undefined}
+      aria-labelledby={`${id}-title`}
+      className={`scroll-mt-4 rounded-xl border bg-paper p-5 outline-none sm:p-6 xl:p-8 ${state === "current" ? "border-lapis/40" : "border-line"}`}
+    >
+      <div className="flex items-start gap-3 sm:gap-4">
+        <StepBadge n={n} state={state} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2 id={`${id}-title`} className="font-serif text-lg font-semibold leading-snug sm:text-xl xl:text-2xl">
+              {title}
+              {status && <span className="sr-only"> — {status}</span>}
+            </h2>
+            {chip && (
+              <span aria-hidden="true" className={`text-sm ${left || optional ? "text-muted" : "font-medium text-tile"}`}>
+                {status}
+              </span>
+            )}
+          </div>
+          {description && <p className="mt-1 max-w-3xl text-sm text-muted xl:text-base">{description}</p>}
+        </div>
+      </div>
+      <div className="mt-5 space-y-5 xl:mt-6 xl:space-y-6">{children}</div>
+    </section>
+  );
+}
+
+/** To‘ldirish tartibi (ixcham): nechta bosqich tayyor va keyingi qadam — PDF kartasidan keyin turadi */
+function StepNav({ steps }: { steps: StepInfo[] }) {
+  const ready = steps.filter((s) => s.left === 0).length;
+  const next = steps.find((s) => s.left > 0);
+  return (
+    <nav aria-labelledby="steps-title" className="rounded-xl border border-line bg-paper px-4 py-3 sm:px-5">
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <p id="steps-title" className="font-medium">
+          To‘ldirish tartibi
+        </p>
+        <p className="text-muted">
+          {ready}/{steps.length} tayyor
+        </p>
+      </div>
+      <div aria-hidden="true" className="mt-2 h-1.5 overflow-hidden rounded-full bg-mist">
+        <div
+          className="h-full rounded-full bg-tile transition-[width] motion-reduce:transition-none"
+          style={{ width: `${(ready / steps.length) * 100}%` }}
+        />
+      </div>
+      <p className="mt-2 text-sm">
+        {next ? (
+          <a href={next.href} className="link">
+            Keyingi qadam: {next.n}. {next.title}
+          </a>
+        ) : (
+          <span className="font-medium text-tile">Hammasi tayyor</span>
+        )}
+      </p>
+    </nav>
   );
 }

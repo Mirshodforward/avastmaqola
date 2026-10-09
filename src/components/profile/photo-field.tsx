@@ -45,8 +45,7 @@ export function PhotoField({ initialUrl, enabled, name }: { initialUrl: string |
         <Avatar src={url} name={name} size={112} />
         <div className="max-w-md space-y-3">
           <p className="text-sm leading-relaxed text-muted">
-            Yuzingiz markazda, yorug‘ joyda va bir xil fonda olingan rasmiy surat tanlang. Rasm kvadrat
-            shaklga keltiriladi, joylashuv (GPS) kabi yashirin ma’lumotlari o‘chiriladi.
+            Yuzingiz aniq ko‘ringan rasmiy surat tanlang. Rasm kvadrat qilib kesiladi.
           </p>
           {enabled ? (
             <div className="flex flex-wrap gap-2">

@@ -12,12 +12,15 @@ export async function notifyUser(userId: string, text: string) {
   if (user?.chat) await sendMessage(user.chat, text).catch((e) => console.error("[notify] o‘qituvchi:", e));
 }
 
-export async function notifyAdmins(text: string) {
-  const admins = await db
+/** Bir roldagi hammaga (admin yoki moderator) */
+export async function notifyRole(role: "admin" | "moderator", text: string) {
+  const staff = await db
     .select({ chat: users.telegramUserId })
     .from(users)
-    .where(and(eq(users.role, "admin"), isNotNull(users.telegramUserId)));
+    .where(and(eq(users.role, role), isNotNull(users.telegramUserId)));
   await Promise.all(
-    admins.map((a) => sendMessage(a.chat!, text).catch((e) => console.error("[notify] admin:", e))),
+    staff.map((a) => sendMessage(a.chat!, text).catch((e) => console.error(`[notify] ${role}:`, e))),
   );
 }
+
+export const notifyAdmins = (text: string) => notifyRole("admin", text);
