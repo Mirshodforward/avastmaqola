@@ -15,7 +15,7 @@ export const directionsPageText: Record<Lang, typeof uz> = {
   uz,
   ru: {
     title: "Научные направления",
-    description: (university) => `Научные направления ${university} и авторы по каждому из них.`,
+    description: (university) => `Научные направления ${university} и авторы, работающие в каждом из них.`,
     empty: "Открытых профилей пока нет.",
     authors: (n) => `${n} ${ruPlural(n, ["автор", "автора", "авторов"])}`,
     articles: (n) => `${n} ${ruPlural(n, ["статья", "статьи", "статей"])}`,

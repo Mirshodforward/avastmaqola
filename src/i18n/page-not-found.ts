@@ -10,5 +10,5 @@ const uz = {
 export const notFoundText: Record<Lang, typeof uz> = {
   uz,
   ru: { title: "Страница не найдена", home: "На главную", articles: "Статьи" },
-  en: { title: "Page not found", home: "Home page", articles: "Articles" },
+  en: { title: "Page not found", home: "Go to home page", articles: "Articles" },
 };

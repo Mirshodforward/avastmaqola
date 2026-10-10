@@ -13,10 +13,33 @@ export const ACADEMIC_DEGREE_LABELS: Record<AcademicDegree, string> = {
 
 type Credentials = { position: string | null; academicDegree: AcademicDegree | null };
 
-/** "Dotsent, Falsafa doktori (PhD)". Lavozim — o‘qituvchi yozgan matn (o‘zgarmaydi), daraja — sahifa tilida */
+/** Taklif qilingan lavozimlarning tarjimasi (POSITION_SUGGESTIONS); o‘qituvchi o‘zi yozgani o‘zgarmaydi */
+const POSITIONS: Record<Exclude<Lang, "uz">, Record<string, string>> = {
+  ru: {
+    Assistent: "Ассистент",
+    "O‘qituvchi": "Преподаватель",
+    "Katta o‘qituvchi": "Старший преподаватель",
+    Dotsent: "Доцент",
+    Professor: "Профессор",
+    "Kafedra mudiri": "Заведующий кафедрой",
+    Dekan: "Декан",
+  },
+  en: {
+    Assistent: "Assistant lecturer",
+    "O‘qituvchi": "Lecturer",
+    "Katta o‘qituvchi": "Senior lecturer",
+    Dotsent: "Associate professor",
+    Professor: "Professor",
+    "Kafedra mudiri": "Head of department",
+    Dekan: "Dean",
+  },
+};
+
+/** "Dotsent, Falsafa doktori (PhD)" — sahifa tilida: daraja va taklif qilingan lavozim tarjima qilinadi */
 export function credentialsLine({ position, academicDegree }: Credentials, lang: Lang = "uz"): string {
   const degree = academicDegree && (lang === "uz" ? ACADEMIC_DEGREE_LABELS : profileText[lang].degrees)[academicDegree];
-  return [position, degree].filter(Boolean).join(", ");
+  const role = position && lang !== "uz" ? (POSITIONS[lang][position.trim()] ?? position) : position;
+  return [role, degree].filter(Boolean).join(", ");
 }
 
 export const POSITION_SUGGESTIONS = [

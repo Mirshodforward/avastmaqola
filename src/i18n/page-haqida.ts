@@ -1,6 +1,7 @@
-// Manba: src/app/[lang]/haqida/page.tsx. steps — maqola joylash bosqichlari (bosh sahifadagi jarayon ham shu yerdan;
-// o‘zbekchasi src/lib/portal.ts dagi PORTAL_STEPS bilan bir xil)
+// Manba: src/app/[lang]/haqida/page.tsx. steps — maqola joylash bosqichlari: bosh sahifadagi jarayon ham shu yerdan
+// (home/steps.tsx), o‘zbekchasi — src/lib/portal.ts dagi PORTAL_STEPS
 import type { Lang } from "@/lib/langs";
+import { PORTAL_STEPS } from "@/lib/portal";
 
 const uz = {
   title: "Portal haqida",
@@ -8,15 +9,7 @@ const uz = {
   intro: (university: string) =>
     `${university} o‘qituvchilarining ilmiy maqolalari universitet ko‘rib chiqqanidan keyin shu portalda e’lon qilinadi.`,
   stepsTitle: "Maqola qanday joylanadi",
-  steps: [
-    { title: "Profilni to‘ldiring", text: "Rasm, lavozim, ilmiy yo‘nalish va muassasa maqola sahifasining tepasida ko‘rinadi." },
-    {
-      title: "Maqolani qo‘shing",
-      text: "PDF hamda o‘zbek, rus va ingliz tilida sarlavha, annotatsiya va kalit so‘zlar. AI yordamchi ularni PDF asosida to‘ldirib beradi.",
-    },
-    { title: "Ko‘rib chiqishga yuboring", text: "Universitet xodimi tekshiradi, natija Telegram’ga keladi." },
-    { title: "Maqola chop etiladi", text: "Alohida ommaviy sahifa, Google Scholar uchun moslangan." },
-  ],
+  steps: PORTAL_STEPS,
   openTitle: "O‘qish va iqtibos",
   openText:
     "Maqola sahifasi va PDF fayli hammaga ochiq. Har bir maqolaning litsenziyasi va tayyor iqtibosi (APA, BibTeX) uning sahifasida.",
@@ -63,7 +56,7 @@ export const aboutPageText: Record<Lang, typeof uz> = {
         title: "Add your article",
         text: "The PDF, plus the title, abstract and keywords in Uzbek, Russian and English. The AI assistant fills these in from the PDF.",
       },
-      { title: "Submit for review", text: "A university staff member reviews it, and you receive the result in Telegram." },
+      { title: "Submit for review", text: "A university staff member reviews it, and the result is sent to you via Telegram." },
       { title: "Your article is published", text: "Its own public page, optimized for Google Scholar." },
     ],
     openTitle: "Reading and citing",

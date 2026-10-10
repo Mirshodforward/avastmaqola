@@ -20,7 +20,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   return [
     ...["/", "/maqolalar", "/mualliflar", "/yonalishlar", "/yangiliklar", "/haqida"].flatMap((p) => page(p)),
     ...published.flatMap((a) => page(`/maqola/${a.id}`, a.updatedAt)),
-    ...news.flatMap((n) => page(`/yangiliklar/${n.id}`, n.updatedAt)),
+    // Yangilik matni faqat o‘zbekcha — ruscha/inglizcha nusxasi canonical bilan o‘zbekchasiga ishora qiladi
+    ...news.map((n) => ({ url: `${url}/yangiliklar/${n.id}`, lastModified: n.updatedAt })),
     ...teachers.flatMap((t) => page(`/oqituvchi/${t.slug}`, t.updatedAt)),
   ];
 }

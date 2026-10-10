@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { homeText } from "@/i18n/home";
 import { localePath } from "@/i18n/lang";
-import { publicText } from "@/i18n/public";
+import { aboutPageText } from "@/i18n/page-haqida";
 import type { Lang } from "@/lib/langs";
-import { PORTAL_STEPS } from "@/lib/portal";
 import { HomeSection } from "./home-section";
 import { seq } from "./motion";
 
@@ -15,8 +14,8 @@ import { seq } from "./motion";
  */
 export function HomeSteps({ lang }: { lang: Lang }) {
   const t = homeText[lang].steps;
-  // O‘zbekchasi /haqida bilan bitta manbadan (PORTAL_STEPS), tarjimalari lug‘atda
-  const steps = lang === "uz" ? PORTAL_STEPS : publicText[lang].aboutPage.steps;
+  // /haqida bilan bitta manbadan (o‘zbekchasi — PORTAL_STEPS)
+  const steps = aboutPageText[lang].steps;
   return (
     <HomeSection
       id="steps-title"

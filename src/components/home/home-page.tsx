@@ -61,7 +61,7 @@ export function HomePage({ lang }: { lang: Lang }) {
             l-down ichki div’da: header’ning o‘zida chiziq animatsiyasi turibdi, ikki animation bir elementda bir-birini bosardi */}
         <header className="home-header sticky top-0 z-30 border-b border-line bg-mist/80 backdrop-blur-md">
           <div className={`l-down flex h-(--header-h) items-center justify-between gap-2 ${PUBLIC_WIDTH}`}>
-            <SiteBrand />
+            <SiteBrand lang={lang} />
             <PublicNav />
           </div>
         </header>

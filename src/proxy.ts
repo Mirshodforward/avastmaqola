@@ -71,7 +71,8 @@ async function refresh(request: NextRequest) {
 }
 
 export const config = {
-  // Hammasi, faqat Next ichki yo‘llari ("/_next", "/__nextjs…"), media fayllar va nuqtali yo‘llar (favicon.ico,
-  // sitemap.xml, robots.txt, rasmlar) bundan mustasno
-  matcher: ["/((?!_|media/|.*\\..*).*)"],
+  // Hammasi, faqat Next ichki yo‘llari ("/_next", "/__nextjs…"), media va haqiqiy fayllar (favicon, robots, sitemap,
+  // public/*.svg) bundan mustasno. Boshqa nuqtali yo‘llar (skanerlarning /wp-login.php, /.env) ham /uz/... ga
+  // rewrite qilinadi — umumiy 404 ga tushadi, [lang] uchun har biri alohida keshlangan 404 bo‘lib qolmaydi
+  matcher: ["/((?!_|media/|favicon\\.ico|robots\\.txt|sitemap\\.xml|.*\\.svg$).*)"],
 };

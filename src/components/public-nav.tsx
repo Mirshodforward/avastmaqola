@@ -54,7 +54,7 @@ export function PublicNav() {
       </ul>
       {/* md dan torda qatorga sig‘maydi — ☰ menyu ichida */}
       <LangSwitcher className="hidden md:block" />
-      <ThemeToggle className="hidden md:inline-flex" />
+      <ThemeToggle lang={lang} className="hidden md:inline-flex" />
       {me ? (
         <UserMenu name={me.name} photoUrl={me.photoUrl} admin={me.role === "admin"} moderator={me.role === "moderator"} compact />
       ) : (
@@ -111,7 +111,7 @@ export function PublicNav() {
             </>
           )}
           <li className="mt-2 border-t border-line pt-2 md:hidden">
-            <ThemeToggle label />
+            <ThemeToggle label lang={lang} />
           </li>
           <LangLinks className="md:hidden" />
         </ul>

@@ -28,7 +28,7 @@ export function PublicFooter() {
     <footer className="border-t border-line bg-paper">
       <div className={`flex flex-col gap-4 py-5 lg:flex-row lg:items-center lg:justify-between lg:gap-8 ${PUBLIC_WIDTH}`}>
         <div className="shrink-0">
-          <SiteBrand />
+          <SiteBrand lang={lang} />
         </div>
         {/* O‘ng ustun: bo‘limlar va ostida kichik yozuv — brend balandligidan oshmaydi, footer lg’da bir qator bo‘lib qoladi */}
         <div className="flex flex-col gap-2 lg:items-end">

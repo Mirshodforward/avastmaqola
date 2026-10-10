@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Literata, Onest } from "next/font/google";
+import { InlineScript } from "@/components/inline-script";
 import { SERVICE_NAME, SITE_NAME, siteUrl } from "@/server/site";
 import "./globals.css";
 
@@ -42,7 +43,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="uz" className={`${literata.variable} ${onest.variable} h-full antialiased`} suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        <InlineScript html={THEME_SCRIPT} />
       </head>
       <body className="flex min-h-full flex-col bg-mist font-sans text-ink">{children}</body>
     </html>

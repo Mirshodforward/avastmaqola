@@ -6,7 +6,7 @@ import { PublicFooter } from "@/components/public-footer";
 import { PublicHeader } from "@/components/public-header";
 import { PUBLIC_WIDTH } from "@/components/public-width";
 import { JsonLd } from "@/components/seo/json-ld";
-import { langAlternates, localePath } from "@/i18n/lang";
+import { localePath } from "@/i18n/lang";
 import { newsPageText } from "@/i18n/page-yangiliklar";
 import { pageLang } from "@/i18n/server";
 import { SITE_NAME, UNIVERSITY_NAME } from "@/lib/brand";
@@ -17,8 +17,6 @@ import { PLACEHOLDER_NEWS_ID, getPublishedNews } from "@/server/news/service";
 import { siteUrl } from "@/server/site";
 
 type Props = PageProps<"/[lang]/yangiliklar/[id]">;
-
-const OG_LOCALE = { uz: "uz_UZ", ru: "ru_RU", en: "en_US" } as const;
 
 // Maqola sahifasidagidek to‘liq statik: birinchi so‘rov ham tayyor HTML, yo‘q yoki qoralama yangilik — haqiqiy 404
 export const ensureStatic = "navigation";
@@ -37,9 +35,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const [lang, n] = await Promise.all([pageLang(params), load(params)]);
   if (!n) return { title: newsPageText[lang].notFound, robots: { index: false } };
 
-  // Sarlavha va tavsif — yangilikning o‘zi (admin o‘zbekcha yozadi), har bir tilda bir xil
+  // Sarlavha va tavsif — yangilikning o‘zi (admin o‘zbekcha yozadi), har bir tilda bir xil. Matn tarjima qilinmagani
+  // uchun ruscha/inglizcha nusxa alohida sahifa emas: canonical o‘zbekchasiga (qidiruvda dublikat bo‘lmasin), hreflang yo‘q
   const description = truncate(n.body.replace(/\s+/g, " "), 160);
-  const alternates = langAlternates(lang, `/yangiliklar/${n.id}`);
+  const alternates = { canonical: `/yangiliklar/${n.id}` };
   return {
     title: n.title,
     description,
@@ -48,7 +47,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     openGraph: {
       type: "article",
       siteName: SITE_NAME,
-      locale: OG_LOCALE[lang],
+      // Matn o‘zbekcha, og:url ham o‘zbekcha sahifa
+      locale: "uz_UZ",
       url: alternates.canonical,
       title: n.title,
       description,

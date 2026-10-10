@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { LangScope } from "@/components/lang-scope";
 import { NotFoundBody } from "@/components/not-found-body";
 import { PublicFooter } from "@/components/public-footer";
 import { PublicHeader } from "@/components/public-header";
@@ -12,11 +13,12 @@ export const metadata: Metadata = { title: notFoundText.uz.title };
  * bilan; ma’lumot o‘qilmaydi (statik). Status 404 va noindex’ni Next o‘zi qo‘yadi. Matn sahifa tilida — NotFoundBody.
  */
 export default function NotFound() {
+  // Header va footer ham sahifa tilida o‘qilsin (<html lang> o‘zbekcha)
   return (
-    <>
+    <LangScope>
       <PublicHeader />
       <NotFoundBody />
       <PublicFooter />
-    </>
+    </LangScope>
   );
 }

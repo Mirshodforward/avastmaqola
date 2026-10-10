@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useSyncExternalStore } from "react";
 import { commonText } from "@/i18n/common";
-import { useLang } from "@/i18n/use-lang";
+import type { Lang } from "@/lib/langs";
 
 const KEY = "theme";
 
@@ -26,10 +26,11 @@ const isDark = () => document.documentElement.dataset.theme === "dark";
 /**
  * Kun/tun rejimi. Mavzu <html data-theme> da: sahifa chizilishidan oldin layout’dagi skript qo‘yadi, tugma almashtiradi
  * va tanlovni saqlaydi. Oy/quyosh CSS bilan (dark:) — server HTML’i hamma uchun bir xil, miltillash yo‘q.
- * label — menyu ichidagi yozuvli qator.
+ * label — menyu ichidagi yozuvli qator. lang prop bilan (useParams emas): kabinetning Suspense fallback’ida ham
+ * chiziladi, u yerda navigatsiya hook’i build’da statik shell’ni bo‘sh qoldirardi.
  */
-export function ThemeToggle({ label = false, className = "" }: { label?: boolean; className?: string }) {
-  const text = commonText[useLang()].themeToggle.label;
+export function ThemeToggle({ label = false, className = "", lang = "uz" }: { label?: boolean; className?: string; lang?: Lang }) {
+  const text = commonText[lang].themeToggle.label;
   // Server va gidratatsiyada noma’lum (aria-pressed chiqmaydi), keyin haqiqiy holat
   const dark = useSyncExternalStore(subscribe, isDark, () => undefined);
 

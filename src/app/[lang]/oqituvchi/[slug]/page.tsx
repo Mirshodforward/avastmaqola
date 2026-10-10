@@ -50,7 +50,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { p, works } = data;
   const name = fullName(p);
   const base = t.description(credentialsLine(p, lang), p.institution, p.direction);
-  const description = truncate(p.bio ? `${base} ${p.bio}` : base, 160);
+  // Biografiya — o‘qituvchi yozgan o‘zbekcha matn: rus va ingliz tavsifi yarmi o‘zbekcha bo‘lib qolmasin
+  const description = truncate(p.bio && lang === "uz" ? `${base} ${p.bio}` : base, 160);
   const path = `/oqituvchi/${p.slug}`;
   return {
     title: name,
@@ -100,7 +101,8 @@ function TeacherProfile({ p, works, lang }: { p: PublicProfile; works: ArticleLi
   const t = teacherPageText[lang];
   const name = fullName(p);
   const credentials = credentialsLine(p, lang);
-  // Lavozim — o‘qituvchi yozgan o‘zbekcha matn (lang="uz"), ilmiy daraja — sahifa tilida
+  // Ilmiy daraja va taklif qilingan lavozim — sahifa tilida; o‘qituvchi o‘zi yozgan lavozim o‘zbekcha qoladi (lang="uz")
+  const role = credentialsLine({ position: p.position, academicDegree: null }, lang);
   const degree = credentialsLine({ position: null, academicDegree: p.academicDegree }, lang);
   // Kafedra yo‘nalish bilan bir xil yozilgan bo‘lsa, ikki marta ko‘rsatilmaydi
   const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -118,14 +120,15 @@ function TeacherProfile({ p, works, lang }: { p: PublicProfile; works: ArticleLi
             <h1 id="teacher-name" className="font-serif text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
               {name}
             </h1>
+            {/* To‘liq ism o‘zbekcha shaklda ("… o‘g‘li", "… qizi") */}
             {p.patronymic && (
-              <p className="mt-1 text-sm text-muted">
+              <p lang="uz" className="mt-1 text-sm text-muted">
                 {p.lastName} {p.firstName} {p.patronymic}
               </p>
             )}
             {credentials && (
               <p className="mt-1 text-lg">
-                <span lang="uz">{p.position}</span>
+                <span lang={role === p.position ? "uz" : undefined}>{role}</span>
                 {degree && `, ${degree}`}
               </p>
             )}

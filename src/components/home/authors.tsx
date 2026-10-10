@@ -32,7 +32,8 @@ async function Authors({ lang }: { lang: Lang }) {
   const directions = groupByDirection(teachers).slice(0, 10);
   const t = homeText[lang].authors;
 
-  // Lavozim va yo‘nalish — o‘qituvchi o‘zbekcha yozgan matn (lang="uz": boshqa tildagi sahifada to‘g‘ri talaffuz)
+  // Yo‘nalish — o‘qituvchi o‘zbekcha yozgan matn (lang="uz": boshqa tildagi sahifada to‘g‘ri talaffuz).
+  // Lavozim va daraja satri esa sahifa tilida (credentialsLine tarjima qiladi)
   return (
     <HomeSection
       id="authors-title"
@@ -65,9 +66,7 @@ async function Authors({ lang }: { lang: Lang }) {
                       {name}
                     </Link>
                   </h3>
-                  <p lang="uz" className="mt-0.5 line-clamp-2 text-sm text-muted">
-                    {credentialsLine(a, lang)}
-                  </p>
+                  <p className="mt-0.5 line-clamp-2 text-sm text-muted">{credentialsLine(a, lang)}</p>
                 </div>
                 <div className="flex items-end justify-between gap-3 border-t border-line pt-3 text-sm">
                   <p lang="uz" className="line-clamp-2 text-muted">
