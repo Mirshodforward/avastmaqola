@@ -17,7 +17,8 @@ Universitet o‘qituvchilarining ilmiy maqolalari portali. O‘qituvchi Telegram
 | Server | Linux, **bitta** Node.js jarayoni (pastda «Muhim cheklovlar») |
 | Node.js | 22.13+ yoki 24 LTS |
 | PostgreSQL | 14+ (tavsiya: 16 yoki 17), UTF8 kodlashdagi baza |
-| Domen va HTTPS | Majburiy: Telegram webhook, Zenodo OAuth va xavfsiz cookie’lar (`__Host-`, `Secure`) faqat https bilan ishlaydi |
+| Domen va HTTPS | Majburiy: Telegram webhook, Zenodo OAuth va xavfsiz cookie’lar (`__Host-`, `Secure`) faqat https bilan ishlaydi. Server o‘zi ham `APP_URL`ga https orqali ulana olsin (DNS, sertifikat): o‘zgarishdan keyin ommaviy sahifalarni shu manzil orqali qayta yaratadi, aks holda qayta ishga tushgach eski nusxa (masalan, olib tashlangan maqola) chiqib qolishi mumkin |
+| Tashqi internet | Build: `fonts.googleapis.com`, `fonts.gstatic.com` (shriftlar; bo‘lmasa build yiqiladi). Ishlashda: `api.telegram.org`, `api.anthropic.com`, `pub.orcid.org`, `api.openalex.org`, `zenodo.org` (sinovda `sandbox.zenodo.org`) |
 | Reverse proxy | nginx (namuna pastda) |
 | Disk | Doimiy papka (`STORAGE_DIR`): profil rasmlari, maqola PDF’lari, yangilik rasmlari |
 
@@ -36,17 +37,21 @@ Production’da `.env.local` emas, server muhitiga (masalan, systemd `Environmen
 | `TELEGRAM_BOT_USERNAME` | ha | Bot username, `@` siz |
 | `TELEGRAM_BOT_TOKEN` | ha | [@BotFather](https://t.me/BotFather) bergan token |
 | `TELEGRAM_WEBHOOK_SECRET` | ha | 1–256 belgili tasodifiy satr (`A-Z a-z 0-9 _ -`) |
-| `ANTHROPIC_API_KEY` | yo‘q | Claude: muharrirdagi AI yordamchi va «Internetdagi ma’lumotlarim» qidiruvi. Kalit bo‘lmasa ikkalasi o‘chiq. Lokal `.env.local`dagi `CLAUDE-API-KEY` nomi production’da ishlamaydi (systemd/shell defisli nomni qabul qilmaydi) |
-| `ZENODO_URL` | yo‘q | `https://sandbox.zenodo.org` (sinov) yoki `https://zenodo.org` — boshqasi qabul qilinmaydi |
+| `ANTHROPIC_API_KEY` | yo‘q | Claude: muharrirdagi AI yordamchi va «Internetdagi ma’lumotlarim» qidiruvi. Kalit bo‘lmasa ikkalasi o‘chiq. Lokal `.env.local`dagi `CLAUDE-API-KEY` o‘rniga production’da shu nomni ishlating (defisli nomni shell o‘qiy olmaydi) |
+| `ZENODO_URL` | yo‘q | `https://sandbox.zenodo.org` (sinov) yoki `https://zenodo.org`. Boshqa qiymatda panel ko‘rinmaydi (logda `[zenodo] ZENODO_URL ruxsat etilmagan`) |
 | `ZENODO_CLIENT_ID`, `ZENODO_CLIENT_SECRET` | yo‘q | Zenodo OAuth ilova (6-bo‘lim). Uchala `ZENODO_*` bo‘lmasa, Zenodo paneli ko‘rinmaydi |
 
-`NODE_ENV=production` bo‘lishi shart (`npm start` o‘zi qo‘yadi).
+`NODE_ENV`ni bu faylga yozmang — `npm start` o‘zi `production` qo‘yadi. Fayl ham shell (`set -a; . …`), ham systemd tomonidan o‘qiladi: `KALIT=qiymat` ko‘rinishida; maxsus belgili (`$ & ; #`, bo‘sh joy) qiymatni bittalik qo‘shtirnoqqa oling.
 
 ### 3. O‘rnatish va ishga tushirish
 
 Hammasini (clone, build, ishga tushirish) bitta foydalanuvchi nomidan bajaring (namunada `avtomaqola`): ishlab turgan server `.next` papkasiga ham yozadi.
 
 ```bash
+# Baza: egasi — ilova foydalanuvchisi (PostgreSQL 15+ da faqat egasi jadval yarata oladi)
+sudo -u postgres createuser -P avtomaqola
+sudo -u postgres createdb -O avtomaqola -E UTF8 -T template0 avtomaqola
+
 git clone git@github.com:Mirshodforward/avastmaqola.git /opt/avtomaqola
 cd /opt/avtomaqola
 npm ci --include=dev        # devDependencies ham kerak: build (TypeScript, Tailwind) va migratsiya (drizzle-kit)
@@ -77,13 +82,21 @@ Restart=always
 WantedBy=multi-user.target
 ```
 
-`-H 127.0.0.1` shart: busiz Next barcha tarmoq interfeyslarida (0.0.0.0) tinglaydi va 3000-port orqali nginx chetlab o‘tiladi. `STORAGE_DIR` papkasi shu `User` uchun yoziladigan bo‘lsin.
+`-H 127.0.0.1` shart: busiz Next barcha tarmoq interfeyslarida (0.0.0.0) tinglaydi — 3000-port orqali nginx chetlab o‘tiladi va mijoz `X-Real-IP`ni o‘zi yozib, IP limitlarini aylanib o‘tadi. `STORAGE_DIR` papkasi shu `User` uchun yoziladigan bo‘lsin. Loglar: `journalctl -u avtomaqola -f`.
 
 **nginx** (asosiysi):
 
 ```nginx
+limit_req_zone $binary_remote_addr zone=auth:10m rate=10r/m;   # http {} darajasida (conf.d fayli boshida ham bo‘ladi)
+
 server {
-    listen 443 ssl http2;
+    listen 80;
+    server_name maqola.example.uz;
+    return 301 https://maqola.example.uz$request_uri;
+}
+
+server {
+    listen 443 ssl http2;                          # nginx 1.25.1+: `listen 443 ssl;` + `http2 on;`
     server_name maqola.example.uz;
     # ssl_certificate ... (masalan, certbot)
 
@@ -93,6 +106,17 @@ server {
         proxy_pass http://127.0.0.1:3000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;   # IP bo‘yicha limitlar shunga tayanadi
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;                       # sahifalar oqim (streaming) bo‘lib keladi
+    }
+
+    # Yangi kirish/ro‘yxatdan o‘tish urinishlari: telefon raqamlarini terib tekshirishdan himoya.
+    # Butun /api/auth/ ga qo‘ymang — kirish sahifasi /api/auth/flow ni har 2 soniyada so‘raydi
+    location ~ ^/api/auth/(login|register)$ {
+        limit_req zone=auth burst=10 nodelay;
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
@@ -115,7 +139,7 @@ server {
 }
 ```
 
-Tavsiya: botlar uchun `/maqola/` va `/oqituvchi/` yo‘llariga `limit_req` (mavjud bo‘lmagan manzillar ham 404 sifatida diskka keshlanadi).
+Tavsiya: botlar uchun dinamik sahifalarga — `/maqola/`, `/oqituvchi/`, `/yangiliklar/` va ularning `/ru/…`, `/en/…` nusxalari — `limit_req` qo‘ying: mavjud bo‘lmagan manzillar ham 404 sifatida diskka keshlanadi. Serverning o‘z IP’sini limitdan chiqaring — u o‘zgarishdan keyin sahifalarni o‘zi ketma-ket so‘rab yangilaydi.
 
 ### 4. Deploy’dan keyin bir martalik ishlar
 
@@ -163,23 +187,27 @@ Avtomatik testlar (`node tests/zenodo/run.mjs`, soxta Zenodo serveri bilan) — 
 
 - PostgreSQL: muntazam `pg_dump` (barcha foydalanuvchilar, maqolalar, sessiyalar).
 - `STORAGE_DIR`: butun papka (PDF’lar, rasmlar). Bazadagi yozuvlar shu fayllarga ishora qiladi — ikkalasi birga tiklanadi.
+- `/etc/avtomaqola.env` (maxfiy kalitlar) — alohida, xavfsiz joyda.
 
 ### 8. Muhim cheklovlar va xavfsizlik
 
 - ⚠️ **Production’da hech qachon `npm run dev` ishlatmang.** Dev rejimida `/admin` va `/moderator` loginsiz ochiq (lokal sinov uchun ataylab qilingan, `src/server/auth/session.ts` → `ADMIN_OPEN`). Production’da faqat admin/moderator roli bilan.
-- ⚠️ **`npm run seed:demo` ni production’da ishga tushirmang:** u soxta demo maqola va profillar yaratadi — Google Scholar ularni haqiqiy ilmiy ish deb indekslab qo‘yishi mumkin.
+- ⚠️ **`npm run seed:demo` ni production’da ishga tushirmang:** u soxta demo maqola va profillar yaratadi — Google Scholar ularni haqiqiy ilmiy ish deb indekslab qo‘yishi mumkin. Baza o‘sha serverda bo‘lsa, skript to‘xtatmaydi; tasodifan ishga tushsa: `npm run seed:demo -- --remove`.
 - ⚠️ **Lokal bazani (`.pgdata/`) production’ga ko‘chirmang:** unda demo va sinov ma’lumotlari bor. Production bazasi bo‘sh boshlanadi — `db:migrate` faqat jadvallarni yaratadi.
 - **Bitta server jarayoni:** kesh teglari jarayon xotirasida, statik sahifalar va fayllar lokal diskda. Bir nechta nusxa (cluster, bir necha konteyner) kerak bo‘lsa — umumiy `cacheHandler` va obyekt ombori (S3) talab qilinadi.
-- `APP_URL` saytning haqiqiy manziliga aynan mos bo‘lishi kerak: so‘rovlarning `Origin` tekshiruvi (CSRF himoyasi) shunga tayanadi.
+- `APP_URL` sayt ochiladigan yagona manzil bo‘lsin (`www.` va `http://` → shu manzilga 301): Zenodo qaytish manzili, Telegram webhook, canonical, sitemap, robots, `citation_pdf_url` va xabarlardagi havolalar shundan yasaladi; `__Host-` cookie’lar faqat bitta host’da ishlaydi.
 - Maxfiy qiymatlar (`AUTH_SECRET`, `TELEGRAM_*`, `ANTHROPIC_API_KEY`, `ZENODO_CLIENT_SECRET`) gitga va loglarga tushmasin. `.env.local` gitga kirmaydi.
-- AI limiti: o‘qituvchiga kuniga 30 so‘rov va $5 (`src/server/ai/client.ts`); «Internetdagi ma’lumotlarim» — kuniga 3 qidiruv, shu $5 ichida. Xarajatlar `/admin/ai` sahifasida.
+- AI limiti: o‘qituvchiga kuniga 30 so‘rov va $5 (`src/server/ai/client.ts`); «Internetdagi ma’lumotlarim» — kuniga 3 qidiruv, shu $5 ichida. Sayt bo‘yicha umumiy chegara yo‘q — Anthropic Console’da xarajat limitini qo‘ying. Xarajatlar `/admin/ai` sahifasida.
 
 ### 9. Muammolar
 
 | Belgi | Sabab va yechim |
 |---|---|
 | Build «APP_URL o‘rnatilmagan» deb to‘xtaydi | Build muhitida `APP_URL` yo‘q — `set -a; . /etc/avtomaqola.env; set +a` dan keyin build qiling |
-| Telegram kod kelmaydi | `npm run bot:webhook` natijasi `OK` bo‘lsin; `getWebhookInfo` da xato yo‘qligini tekshiring; nginx `/api/telegram/webhook` ni o‘tkazsin |
+| Build `Invalid URL` bilan yiqiladi | `APP_URL` `https://` bilan boshlanmagan |
+| Build shriftlarni yuklay olmay yiqiladi | Serverdan `fonts.googleapis.com` va `fonts.gstatic.com` ga chiqish yo‘q |
+| Logda «Muhit o‘zgaruvchilari noto‘g‘ri (.env.local): …» | Production’da ham shunday yoziladi — ko‘rsatilgan o‘zgaruvchini `/etc/avtomaqola.env`da tuzatib, xizmatni qayta ishga tushiring. Server noto‘g‘ri muhit bilan ham ishga tushadi, xato birinchi so‘rovlarda chiqadi |
+| Telegram kod kelmaydi | `npm run bot:webhook` natijasi `setWebhook: OK` bo‘lsin; `getWebhookInfo` da xato yo‘qligini tekshiring; nginx `/api/telegram/webhook` ni o‘tkazsin; logda `TELEGRAM_BOT_TOKEN sozlanmagan` — token yo‘q |
 | AI javobi uzilib qoladi | nginx’da `/api/articles/` uchun `proxy_read_timeout 300s` va `proxy_buffering off` |
 | Zenodo’ga joylashda 504 | nginx’da `/api/zenodo/` uchun `proxy_read_timeout 420s` |
 | Fayl yuklashda 413 | nginx `client_max_body_size 11m` |
@@ -192,6 +220,7 @@ Tayyor: Telegram orqali kirish, profil, maqola muharriri (AI yordamchi, avtosaql
 Ochiq ishlar:
 - **Zenodo:** haqiqiy sandbox akkaunt bilan to‘liq sinov hali o‘tkazilmagan; production’dan oldin support@zenodo.org’ga xat. Kod ko‘rigida tasdiqlangan 7 ta kamchilik tuzatilmagan: muvaffaqiyatsiz joylashni kutmasdan qayta boshlash mumkin (cheklov yo‘q), parallel joylashlar bir-biriga xalal berishi mumkin, xato matnlari va ekran o‘quvchi e’lonlari.
 - **«Internetdagi ma’lumotlarim»:** haqiqiy (pullik) Claude qidiruvi bilan hali sinalmagan.
+- **Fayl yuklash:** 10 MB chegarasiga juda yaqin PDF yoki rasm yuklanmaydi — `src/proxy.ts` orqali o‘tadigan so‘rov tanasini Next 10 MiB’da kesadi (multipart qo‘shimchasi bilan so‘rov chegaradan oshadi). Yechim: `next.config.ts` → `experimental.proxyClientMaxBodySize: "11mb"`.
 - **Kirish imkoniyati (`src/app/globals.css`):** lapis tugmalarda klaviatura fokus halqasi deyarli ko‘rinmaydi; input placeholder kontrasti past (3.1:1).
 
 ---
