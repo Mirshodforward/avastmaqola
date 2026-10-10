@@ -37,16 +37,28 @@ const listColumns = {
   issue: articles.issue,
   pages: articles.pages,
   pubYear: articles.pubYear,
+  issueNo: articles.issueNo,
+  issueSeq: articles.issueSeq,
   byline,
 };
 
 type ListRow = Parameters<typeof titleIn>[0] &
-  Parameters<typeof venueLine>[0] & { id: number; publishedAt: Date | null; pubYear: number | null; byline: string };
+  Parameters<typeof venueLine>[0] & {
+    id: number;
+    publishedAt: Date | null;
+    pubYear: number | null;
+    issueNo: number;
+    issueSeq: number | null;
+    byline: string;
+  };
 const toItem = (r: ListRow) => ({
   id: r.id,
   title: titleIn(r),
   byline: r.byline,
   publishedAt: r.publishedAt,
+  // Portaldagi joyi: "3-son, 12-maqola" (maqola raqami moderator belgilagunicha bo‘lmasligi mumkin)
+  issueNo: r.issueNo,
+  issueSeq: r.issueSeq,
   venue: venueLine(r),
   // Asl nashr yili, bo‘lmasa saytda chop etilgan yil (chop etilgan maqolada sana doim bor — DB CHECK)
   year: r.pubYear ?? yearOf(r.publishedAt!),

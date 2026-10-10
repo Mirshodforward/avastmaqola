@@ -64,13 +64,17 @@ export function ReviewPanel({
   const chosen = () =>
     issue.issueNo && issue.issueSeq ? { issueNo: Number(issue.issueNo), issueSeq: Number(issue.issueSeq) } : null;
 
+  /** Yangilangan holat chizilgach (xato aria-describedby bilan bog‘langach) maydonga fokus */
+  const focusPlace = (name: keyof IssueValues) =>
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[name="${name}"]`)?.focus());
+
   /** Joy xatosi (band yoki noto‘g‘ri): xabar va bo‘sh raqam maydon yonida, fokus raqamga */
   function placeFailed(err: ApiError & { nextSeq?: number }, issueNo: number) {
     const message = Object.entries(err.fieldErrors ?? {}).find(([key]) => key.startsWith("place"))?.[1];
     if (!message) return false;
     setPlaceError(message);
     setFree(err.nextSeq ? { issueNo, issueSeq: err.nextSeq } : null);
-    requestAnimationFrame(() => document.querySelector<HTMLElement>('[name="issueSeq"]')?.focus());
+    focusPlace("issueSeq");
     return true;
   }
 
@@ -99,6 +103,8 @@ export function ReviewPanel({
     const where = chosen();
     if (action === "approve" && !where) {
       setPlaceError("Son va raqamni kiriting.");
+      // Xato maydonga bog‘langan (aria-describedby): fokus bo‘sh maydonga o‘tganda o‘qiladi
+      focusPlace(issue.issueNo ? "issueSeq" : "issueNo");
       return;
     }
     // Zenodo’da chop etilgan yozuvni o‘chirib bo‘lmaydi — admin buni bilib qaror qilsin
@@ -144,8 +150,10 @@ export function ReviewPanel({
   );
 
   const placeField = (
-    <div>
-      <p className="text-sm font-medium">Son va raqam</p>
+    <div role="group" aria-labelledby="place-label">
+      <p id="place-label" className="text-sm font-medium">
+        Son va raqam
+      </p>
       <div className="mt-1.5">
         <IssueFields
           value={issue}
@@ -167,6 +175,8 @@ export function ReviewPanel({
               onClick={() => {
                 setIssue({ issueNo: String(free.issueNo), issueSeq: String(free.issueSeq) });
                 setPlaceError(undefined);
+                // Tugma yo‘qoladi — fokus <body>ga tushmasin
+                focusPlace("issueSeq");
               }}
             >
               Bo‘sh: {issueLabel(free.issueNo, free.issueSeq)}

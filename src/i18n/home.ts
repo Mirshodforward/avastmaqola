@@ -1,6 +1,7 @@
 // Manba: src/app/page.tsx, src/components/home/* (header — commonText.publicHeader, footer — commonText.publicFooter,
 // bosqichlar — publicText.aboutPage.steps)
 import type { Lang } from "@/lib/langs";
+import { enPlural, ruPlural } from "./plural";
 
 const uz = {
   homePage: {
@@ -26,21 +27,23 @@ const uz = {
     about: "Portal haqida",
   },
   features: {
-    // home/features.tsx
+    // home/anatomy.tsx (tartib sxemadagi 1–6 belgilar bilan bir xil)
     title: "Imkoniyatlar",
     items: [
       { title: "Uch tilda", text: "Sarlavha, annotatsiya va kalit so‘zlar o‘zbek, rus va ingliz tilida." },
-      { title: "Google Scholar", text: "Har bir maqola sahifasi Scholar indeksi uchun moslangan." },
-      { title: "Ochiq kirish", text: "PDF va annotatsiya hammaga ochiq, CC BY 4.0 litsenziyasi bilan." },
-      { title: "AI yordamchi", text: "PDF asosida sarlavha, annotatsiya va kalit so‘zlarni uch tilda to‘ldiradi." },
-      { title: "Tayyor iqtibos", text: "APA va BibTeX formatida bir bosishda nusxa olinadi." },
       { title: "Muallif profili", text: "Rasm, lavozim, ORCID iD va barcha maqolalar bitta sahifada." },
+      { title: "AI yordamchi", text: "PDF asosida sarlavha, annotatsiya va kalit so‘zlarni uch tilda to‘ldiradi." },
+      { title: "Ochiq kirish", text: "PDF va annotatsiya hammaga ochiq, CC BY 4.0 litsenziyasi bilan." },
+      { title: "Tayyor iqtibos", text: "APA va BibTeX formatida bir bosishda nusxa olinadi." },
+      { title: "Google Scholar", text: "Har bir maqola sahifasi Scholar indeksi uchun moslangan." },
     ],
   },
   articles: {
     // home/latest-articles.tsx
     title: "So‘nggi maqolalar",
     all: "Barcha maqolalar",
+    issue: (n: number) => `${n}-son`,
+    seq: (n: number) => `${n}-maqola`,
   },
   news: {
     // home/latest-news.tsx
@@ -52,6 +55,7 @@ const uz = {
     title: "Mualliflar",
     all: "Barcha mualliflar",
     directions: "Ilmiy yo‘nalishlar",
+    articleCount: (n: number) => `${n} ta maqola`,
   },
   cta: {
     // home/cta.tsx
@@ -82,16 +86,26 @@ export const homeText: Record<Lang, typeof uz> = {
       title: "Возможности",
       items: [
         { title: "На трёх языках", text: "Название, аннотация и ключевые слова на узбекском, русском и английском." },
-        { title: "Google Scholar", text: "Страница каждой статьи адаптирована для индекса Scholar." },
-        { title: "Открытый доступ", text: "PDF и аннотация открыты для всех по лицензии CC BY 4.0." },
-        { title: "ИИ-помощник", text: "Заполняет название, аннотацию и ключевые слова на трёх языках по PDF." },
-        { title: "Готовая ссылка", text: "Ссылка в форматах APA и BibTeX копируется одним нажатием." },
         { title: "Профиль автора", text: "Фото, должность, ORCID iD и все статьи на одной странице." },
+        { title: "ИИ-помощник", text: "Заполняет название, аннотацию и ключевые слова на трёх языках по PDF." },
+        { title: "Открытый доступ", text: "PDF и аннотация открыты для всех по лицензии CC BY 4.0." },
+        { title: "Готовая ссылка", text: "Ссылка в форматах APA и BibTeX копируется одним нажатием." },
+        { title: "Google Scholar", text: "Страница каждой статьи адаптирована для индекса Scholar." },
       ],
     },
-    articles: { title: "Последние статьи", all: "Все статьи" },
+    articles: {
+      title: "Последние статьи",
+      all: "Все статьи",
+      issue: (n) => `Выпуск ${n}`,
+      seq: (n) => `Статья ${n}`,
+    },
     news: { title: "Новости", all: "Все новости" },
-    authors: { title: "Авторы", all: "Все авторы", directions: "Научные направления" },
+    authors: {
+      title: "Авторы",
+      all: "Все авторы",
+      directions: "Научные направления",
+      articleCount: (n) => `${n} ${ruPlural(n, ["статья", "статьи", "статей"])}`,
+    },
     cta: { title: "Разместите свою статью на портале" },
   },
   en: {
@@ -115,16 +129,26 @@ export const homeText: Record<Lang, typeof uz> = {
       title: "Features",
       items: [
         { title: "Three languages", text: "Title, abstract and keywords in Uzbek, Russian and English." },
-        { title: "Google Scholar", text: "Every article page is optimized for the Scholar index." },
-        { title: "Open access", text: "The PDF and abstract are open to everyone under CC BY 4.0." },
-        { title: "AI assistant", text: "Fills in the title, abstract and keywords in three languages from the PDF." },
-        { title: "Ready citation", text: "Copy an APA or BibTeX citation with one click." },
         { title: "Author profile", text: "Photo, position, ORCID iD and all articles on one page." },
+        { title: "AI assistant", text: "Fills in the title, abstract and keywords in three languages from the PDF." },
+        { title: "Open access", text: "The PDF and abstract are open to everyone under CC BY 4.0." },
+        { title: "Ready citation", text: "Copy an APA or BibTeX citation with one click." },
+        { title: "Google Scholar", text: "Every article page is optimized for the Scholar index." },
       ],
     },
-    articles: { title: "Latest articles", all: "All articles" },
+    articles: {
+      title: "Latest articles",
+      all: "All articles",
+      issue: (n) => `Issue ${n}`,
+      seq: (n) => `Article ${n}`,
+    },
     news: { title: "News", all: "All news" },
-    authors: { title: "Authors", all: "All authors", directions: "Research fields" },
+    authors: {
+      title: "Authors",
+      all: "All authors",
+      directions: "Research fields",
+      articleCount: (n) => `${n} ${enPlural(n, "article", "articles")}`,
+    },
     cta: { title: "Post your article on the portal" },
   },
 };

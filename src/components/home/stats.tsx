@@ -1,14 +1,14 @@
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { PUBLIC_WIDTH } from "@/components/public-width";
 import { listPublishedArticles } from "@/server/articles/public";
 import { groupByDirection, listPublicTeachers } from "@/server/profiles/directory";
-import { PUBLIC_WIDTH } from "@/components/public-width";
 
-/** Portal raqamlarda. Chop etilgan maqola bo‘lmasa chizilmaydi ("0 ta maqola" ko‘rsatilmaydi) */
+/** Portal raqamlarda: ufq ostidagi sokin qator (yerda). Chop etilgan maqola bo‘lmasa chizilmaydi */
 export function HomeStats() {
   return (
-    // Balandlik oldindan band: raqamlar oqim bilan kelganda pastdagi bo‘limlar siljimaydi
-    <Suspense fallback={<div className="h-36 border-b border-line bg-paper" />}>
+    // Balandlik oldindan band: raqamlar oqim bilan kelganda hero siljimaydi
+    <Suspense fallback={<div className="h-[12.25rem] lg:h-[7.25rem]" />}>
       <Stats />
     </Suspense>
   );
@@ -27,16 +27,14 @@ async function Stats() {
     { label: "Til: o‘zbek, rus, ingliz", value: 3 },
   ];
   return (
-    <section aria-label="Portal raqamlarda" className="border-b border-line bg-paper">
-      <dl className={`reveal grid grid-cols-2 gap-x-6 gap-y-8 py-10 lg:grid-cols-4 ${PUBLIC_WIDTH}`}>
-        {items.map((item) => (
-          // Raqam yuqorida ko‘rinadi, ekran o‘quvchi esa avval nomini o‘qiydi (dt → dd)
-          <div key={item.label} className="flex flex-col-reverse">
-            <dt className="mt-1 text-sm text-muted">{item.label}</dt>
-            <dd className="font-serif text-4xl font-semibold tabular-nums text-lapis sm:text-5xl">{item.value}</dd>
-          </div>
-        ))}
-      </dl>
-    </section>
+    <dl className={`grid grid-cols-2 gap-y-6 py-7 lg:grid-cols-4 lg:py-8 ${PUBLIC_WIDTH}`}>
+      {items.map((item) => (
+        // Raqam yuqorida ko‘rinadi, ekran o‘quvchi esa avval nomini o‘qiydi (dt → dd)
+        <div key={item.label} className="flex flex-col-reverse justify-end lg:border-l lg:border-line lg:pl-6 lg:first:border-l-0 lg:first:pl-0">
+          <dt className="mt-0.5 text-sm text-muted">{item.label}</dt>
+          <dd className="font-serif text-3xl font-semibold tabular-nums">{item.value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }

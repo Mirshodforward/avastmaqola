@@ -55,9 +55,10 @@ function Items({ items, date }: { items: Item[]; date: (a: Item) => string }) {
   return (
     <ul className="mt-4 divide-y divide-line rounded-xl border border-line bg-paper">
       {items.map((a) => (
-        // Qatorning istalgan joyini bosish «Ko‘rish»ni ochadi (klaviaturada esa bitta tugma)
+        // Qatorning istalgan joyini bosish «Ko‘rish»ni ochadi (klaviaturada esa bitta tugma).
+        // Matn ustunining asosiy kengligi bor: telefonda holat va tugma pastki qatorga tushadi, sarlavha siqilmaydi
         <li key={a.id} className="relative flex flex-wrap items-center gap-x-4 gap-y-2 p-4 hover:bg-mist/60 sm:px-5">
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-[1_1_16rem]">
             <p className="break-words text-base font-medium leading-snug">
               №{a.id}. {a.title}
             </p>

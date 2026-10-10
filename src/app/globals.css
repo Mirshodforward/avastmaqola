@@ -97,31 +97,48 @@ html {
     asman-rise 1.4s cubic-bezier(0.2, 0.7, 0.2, 1) both,
     asman-float 7s ease-in-out 1.6s infinite;
 }
-.asman-horizon {
-  animation: asman-horizon 1s cubic-bezier(0.2, 0.7, 0.2, 1) 0.3s both;
+
+/* Hero: osmon (yuqori) va yer (pastki oq blok). Ufq — yerning yuqori cheti: chiziq chapdan o‘ngga chiziladi.
+   Osmon ufq tomon ko‘k tusga kiradi, logo orqasida esa tong nuri (teal) — hammasi mavzu o‘zgaruvchilaridan,
+   shuning uchun qorong‘i mavzuda ham o‘zi moslashadi */
+.home-sky {
+  background:
+    radial-gradient(70rem 26rem at 80% 100%, color-mix(in oklab, var(--tile) 13%, transparent), transparent 72%),
+    linear-gradient(to bottom, var(--mist), color-mix(in oklab, var(--lapis) 7%, var(--mist)));
+}
+.home-ground {
+  position: relative;
+  background: var(--paper);
+}
+.home-ground::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 2px;
+  background: var(--tile);
+  transform-origin: left;
+  animation: asman-horizon 1.2s cubic-bezier(0.2, 0.7, 0.2, 1) 0.2s both;
 }
 @media (prefers-reduced-motion: reduce) {
   .asman-rise,
-  .asman-horizon {
+  .home-ground::before {
     animation: none;
   }
 }
 
-/* Bosh sahifa bo‘limlari scroll bilan ko‘rinishga kirib keladi. Faqat scroll-driven animatsiyani biladigan
-   brauzerlarda va harakat cheklanmagan bo‘lsa; aks holda bo‘lim darhol ko‘rinadi (mazmun hech qachon yashirin qolmaydi) */
-@keyframes reveal {
-  from {
-    opacity: 0;
-    transform: translateY(2rem);
+/* Yopishqoq header: sahifa boshida chiziqsiz, ~100px scroll’dan keyin pastki chiziq paydo bo‘ladi.
+   Scroll bilan bog‘langan animatsiyani bilmaydigan brauzerda chiziq bo‘lmaydi (fon xiralashuvi saqlanadi) */
+@keyframes home-header-edge {
+  to {
+    border-bottom-color: var(--line);
   }
 }
-@supports (animation-timeline: view()) {
-  @media (prefers-reduced-motion: no-preference) {
-    .reveal {
-      animation: reveal linear both;
-      animation-timeline: view();
-      animation-range: entry 0% entry 35%;
-    }
+@supports (animation-timeline: scroll()) {
+  .home-header {
+    animation: home-header-edge linear both;
+    animation-timeline: scroll(root);
+    animation-range: 0 100px;
   }
 }
 
