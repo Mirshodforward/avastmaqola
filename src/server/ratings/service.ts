@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { cacheTag, revalidateTag } from "next/cache";
 import { titleIn } from "@/lib/article-rules";
+import { avatarUrl } from "@/lib/media";
 import type { RatingStatus } from "@/lib/rating-rules";
 import { AuthError } from "../auth/errors";
 import { db } from "../db";
@@ -18,6 +19,8 @@ export type RatingItem = {
   name: string;
   /** Profil ochiq bo‘lsa — /oqituvchi/{slug} havolasi uchun */
   slug: string | null;
+  /** Profil rasmi: faqat profil ochiq bo‘lsa (yopiq profilning rasmi ko‘rinmaydi) */
+  photoUrl: string | null;
   date: Date;
 };
 
@@ -45,6 +48,7 @@ export async function getArticleRatings(articleId: number): Promise<ArticleRatin
       lastName: users.lastName,
       slug: profiles.slug,
       isPublic: profiles.isPublic,
+      photoKey: profiles.photoKey,
     })
     .from(articleRatings)
     .innerJoin(users, eq(users.id, articleRatings.userId))
@@ -68,6 +72,7 @@ export async function getArticleRatings(articleId: number): Promise<ArticleRatin
       body: r.body,
       name: `${r.firstName} ${r.lastName}`,
       slug: r.isPublic ? r.slug : null,
+      photoUrl: r.isPublic && r.photoKey ? avatarUrl(r.photoKey, 128) : null,
       date: r.date,
     })),
   };

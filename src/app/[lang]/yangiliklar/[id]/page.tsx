@@ -6,6 +6,9 @@ import { PublicFooter } from "@/components/public-footer";
 import { PublicHeader } from "@/components/public-header";
 import { PUBLIC_WIDTH } from "@/components/public-width";
 import { JsonLd } from "@/components/seo/json-ld";
+import { langAlternates, localePath } from "@/i18n/lang";
+import { newsPageText } from "@/i18n/page-yangiliklar";
+import { pageLang } from "@/i18n/server";
 import { SITE_NAME, UNIVERSITY_NAME } from "@/lib/brand";
 import { formatDate, truncate } from "@/lib/format";
 import { newsImageUrl } from "@/lib/media";
@@ -13,7 +16,9 @@ import { parseNewsId } from "@/server/news/schemas";
 import { PLACEHOLDER_NEWS_ID, getPublishedNews } from "@/server/news/service";
 import { siteUrl } from "@/server/site";
 
-type Props = PageProps<"/yangiliklar/[id]">;
+type Props = PageProps<"/[lang]/yangiliklar/[id]">;
+
+const OG_LOCALE = { uz: "uz_UZ", ru: "ru_RU", en: "en_US" } as const;
 
 // Maqola sahifasidagidek to‘liq statik: birinchi so‘rov ham tayyor HTML, yo‘q yoki qoralama yangilik — haqiqiy 404
 export const ensureStatic = "navigation";
@@ -29,21 +34,22 @@ async function load(params: Props["params"]) {
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const n = await load(params);
-  if (!n) return { title: "Yangilik topilmadi", robots: { index: false } };
+  const [lang, n] = await Promise.all([pageLang(params), load(params)]);
+  if (!n) return { title: newsPageText[lang].notFound, robots: { index: false } };
 
+  // Sarlavha va tavsif — yangilikning o‘zi (admin o‘zbekcha yozadi), har bir tilda bir xil
   const description = truncate(n.body.replace(/\s+/g, " "), 160);
-  const url = `/yangiliklar/${n.id}`;
+  const alternates = langAlternates(lang, `/yangiliklar/${n.id}`);
   return {
     title: n.title,
     description,
-    alternates: { canonical: url },
+    alternates,
     // Sahifadagi openGraph layout’dagini butunlay almashtiradi — sayt nomi va til qayta yoziladi
     openGraph: {
       type: "article",
       siteName: SITE_NAME,
-      locale: "uz_UZ",
-      url,
+      locale: OG_LOCALE[lang],
+      url: alternates.canonical,
       title: n.title,
       description,
       publishedTime: new Date(n.publishedAt!).toISOString(),
@@ -54,8 +60,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function NewsItemPage({ params }: Props) {
-  const n = await load(params);
+  const [lang, n] = await Promise.all([pageLang(params), load(params)]);
   if (!n) notFound();
+  const t = newsPageText[lang];
   const published = new Date(n.publishedAt!);
   const url = `${siteUrl()}/yangiliklar/${n.id}`;
 
@@ -63,15 +70,20 @@ export default async function NewsItemPage({ params }: Props) {
     <>
       <PublicHeader />
       <main className={`flex-1 py-10 ${PUBLIC_WIDTH}`}>
-        <article aria-labelledby="news-title" className="mx-auto max-w-3xl">
-          <Link href="/yangiliklar" className="link text-sm">
-            ← Yangiliklar
+        {/* Bo‘lim havolasi (o‘qituvchi profilidagi bilan bir xil); py-1 — bosish maydoni kamida 24px */}
+        <nav aria-label={t.breadcrumb} className="text-sm">
+          <Link href={localePath(lang, "/yangiliklar")} className="link inline-block py-1">
+            {t.title}
           </Link>
-          <h1 id="news-title" className="mt-4 font-serif text-3xl font-semibold leading-tight tracking-tight text-balance sm:text-4xl">
+        </nav>
+        {/* Chap cheti header bilan bir chiziqda; matn qatori o‘qish uchun qulay enda (~75 belgi).
+            Sarlavha va matn — admin o‘zbekcha yozgan yangilik (lang="uz"), sana — sahifa tilida */}
+        <article aria-labelledby="news-title" className="mt-4 max-w-3xl">
+          <h1 id="news-title" lang="uz" className="font-serif text-3xl font-semibold leading-tight tracking-tight text-balance sm:text-4xl">
             {n.title}
           </h1>
           <time dateTime={published.toISOString()} className="mt-3 block text-muted">
-            {formatDate(published)}
+            {formatDate(published, lang)}
           </time>
           {n.imageKey && (
             <Image
@@ -85,7 +97,7 @@ export default async function NewsItemPage({ params }: Props) {
             />
           )}
           {/* Xatboshilar bo‘sh qator bilan ajratiladi, oddiy qator tashlash saqlanadi */}
-          <div className="mt-6 space-y-4 text-lg leading-relaxed">
+          <div lang="uz" className="mt-6 max-w-[34em] space-y-4 text-lg leading-relaxed">
             {n.body.split(/\n{2,}/).map((paragraph, i) => (
               <p key={i} className="whitespace-pre-line">
                 {paragraph}

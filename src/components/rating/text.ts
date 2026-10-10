@@ -14,6 +14,9 @@ const uz = {
     less: "Yashirish",
     /** Oynani ochadigan tugma (maqola tepasida ham, «Iqtiboslar» bo‘limida ham) */
     write: "Iqtibos keltirish",
+    /** Taqsimot ro‘yxati: ko‘rinishi yashirin, ekran o‘quvchi har qatorni matn bilan o‘qiydi */
+    distribution: "Baholar taqsimoti",
+    distributionRow: (stars: number, n: number) => `${stars} yulduz: ${n} ta`,
   },
   form: {
     /** Oyna sarlavhasi — uni ochgan tugma bilan bir xil */
@@ -77,6 +80,8 @@ export const ratingText: Record<Lang, RatingText> = {
       more: (n) => `Ещё ${n} ${ruPlural(n, RU_REVIEWS)}`,
       less: "Скрыть",
       write: "Оставить отзыв",
+      distribution: "Распределение оценок",
+      distributionRow: (stars, n) => `${stars} ${ruPlural(stars, ["звезда", "звезды", "звёзд"])}: ${n}`,
     },
     form: {
       title: "Оставить отзыв",
@@ -128,6 +133,8 @@ export const ratingText: Record<Lang, RatingText> = {
       more: (n) => `${n} more ${enPlural(n, "review", "reviews")}`,
       less: "Show less",
       write: "Write a review",
+      distribution: "Rating breakdown",
+      distributionRow: (stars, n) => `${stars} ${enPlural(stars, "star", "stars")}: ${n}`,
     },
     form: {
       title: "Write a review",

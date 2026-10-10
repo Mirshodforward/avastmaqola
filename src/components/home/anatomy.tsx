@@ -1,19 +1,21 @@
+import { homeText } from "@/i18n/home";
+import type { Lang } from "@/lib/langs";
 import { HomeSection } from "./home-section";
+import { seq } from "./motion";
 
 /** Raqamli belgi: sxemadagi joy va o‘ngdagi izoh bir xil raqam bilan bog‘lanadi (haqiqiy moslik, bezak emas) */
 const PIN = "grid size-6 shrink-0 place-items-center rounded-full bg-tile font-serif text-xs font-semibold text-paper";
 
-const FEATURES = [
-  { title: "Uch tilda", text: "Sarlavha, annotatsiya va kalit so‘zlar o‘zbek, rus va ingliz tilida." },
-  { title: "Muallif profili", text: "Rasm, lavozim, ORCID iD va barcha maqolalar bitta sahifada." },
-  { title: "AI yordamchi", text: "PDF asosida sarlavha, annotatsiya va kalit so‘zlarni uch tilda to‘ldiradi." },
-  { title: "Ochiq kirish", text: "PDF va annotatsiya hammaga ochiq, CC BY 4.0 litsenziyasi bilan." },
-  { title: "Tayyor iqtibos", text: "APA va BibTeX formatida bir bosishda nusxa olinadi." },
-  { title: "Google Scholar", text: "Har bir maqola sahifasi Scholar indeksi uchun moslangan." },
-];
-
+/** Sxemadagi belgi: sxema ko‘rinishga kirganda ketma-ket "chiqadi" (m-pop, sxemaning vaqt chizig‘ida — tl-grp) */
 function Pin({ n, corner = false }: { n: number; corner?: boolean }) {
-  return <span className={`${PIN} absolute ${corner ? "-top-2 -right-2" : "top-1/2 right-0 -translate-y-1/2"}`}>{n}</span>;
+  return (
+    <span
+      style={seq(n - 1)}
+      className={`${PIN} m-pop tl-grp absolute ${corner ? "-top-2 -right-2" : "top-1/2 right-0 -translate-y-1/2"}`}
+    >
+      {n}
+    </span>
+  );
 }
 
 /**
@@ -23,7 +25,7 @@ function Pin({ n, corner = false }: { n: number; corner?: boolean }) {
 function PageSketch() {
   const line = "h-2 rounded-full bg-ink/12";
   return (
-    <div aria-hidden="true" className="w-full max-w-md rounded-2xl border border-line bg-mist p-5 shadow-lg shadow-ink/5 sm:p-6">
+    <div aria-hidden="true" className="m-rise vt-grp w-full max-w-md rounded-2xl border border-line bg-mist p-5 shadow-lg shadow-ink/5 sm:p-6">
       <div className="relative flex items-center gap-1.5 pr-9">
         <span className="rounded-md bg-lapis px-2 py-1 text-[11px] font-semibold text-on-lapis">UZ</span>
         <span className="rounded-md border border-line px-2 py-1 text-[11px] font-medium text-muted">RU</span>
@@ -88,15 +90,17 @@ function PageSketch() {
 }
 
 /** Imkoniyatlar — bitta narsa: maqola sahifasining anatomiyasi (chapda sxema, o‘ngda raqamlangan izohlar) */
-export function HomeAnatomy() {
+export function HomeAnatomy({ lang }: { lang: Lang }) {
+  // Tartib sxemadagi 1–6 belgilar bilan bir xil
+  const t = homeText[lang].features;
   return (
-    <HomeSection id="features-title" title="Imkoniyatlar" tone="paper" stacked>
+    <HomeSection id="features-title" title={t.title} tone="paper" stacked>
       <div className="grid items-center gap-12 lg:grid-cols-[minmax(0,28rem)_minmax(0,1fr)] lg:gap-20">
         <PageSketch />
         <ol className="divide-y divide-line">
-          {FEATURES.map((f, i) => (
-            <li key={f.title} className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-x-4 py-5 first:pt-0 last:pb-0">
-              <span aria-hidden="true" className={`${PIN} mt-0.5`}>
+          {t.items.map((f, i) => (
+            <li key={f.title} className="m-slide grid grid-cols-[1.5rem_minmax(0,1fr)] gap-x-4 py-5 first:pt-0 last:pb-0">
+              <span aria-hidden="true" className={`${PIN} m-pop mt-0.5`}>
                 {i + 1}
               </span>
               <div>

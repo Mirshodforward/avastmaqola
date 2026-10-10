@@ -223,8 +223,9 @@ export function ArticleEditor({
     latest.current = json;
   });
   const pending = json !== saved;
-  // Xato faqat aynan saqlanmagan o‘sha matnga tegishli: o‘qituvchi tuzatsa yoki qaytarib qo‘ysa, xato yo‘qoladi
-  const failed = failure && failure.json === json ? failure : null;
+  // Maydon xatosi — o‘sha maydon tuzatilguncha (touch xatoni tozalaydi); boshqa xato (tarmoq…) — saqlanmagan
+  // o‘zgarish bor ekan. O‘qituvchi o‘zgarishni qaytarib qo‘ysa, xato ham yo‘qoladi
+  const failed = failure && (failure.field ? errors[failure.field] !== undefined : pending) ? failure : null;
 
   const assistant = useAssistant(id, {
     draft: (): AiDraft => ({

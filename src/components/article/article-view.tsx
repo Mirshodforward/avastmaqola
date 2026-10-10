@@ -42,6 +42,10 @@ export function ArticleView({
   const t = articleViewText[lang];
   const RT = ratingText[lang];
   const main = allLangs ? v.lang : shownLang(v, lang);
+  // Ommaviy sahifa (oldindan ko‘rish ham, ko‘rib chiquvchi ham emas): kalit so‘zlar sahifada ko‘rsatilmaydi (egasining
+  // qarori). O‘qituvchi va admin ularni baribir ko‘radi — tekshirish uchun; SEO uchun kalit so‘zlar (meta keywords,
+  // JSON-LD) generateMetadata va seo.ts’dan keladi, bu qator ularga tegmaydi
+  const publicView = !preview && !allLangs;
   const title = v.titles[main];
   const year = yearOf(v.publishedAt ?? v.updatedAt);
   // "3-son, 12-maqola" — sahifadagi va iqtibosdagi raqam (saytdagi №id emas). Iqtibos jurnal nomi kabi o‘zbekcha qoladi
@@ -181,7 +185,7 @@ export function ArticleView({
       <section lang={main} id={`annotatsiya-${main}`} className="mt-10">
         <h2 className="font-serif text-lg font-semibold">{ABSTRACT_HEADINGS[main]}</h2>
         <Paragraphs text={v.abstracts[main]} />
-        <Keywords lang={main} list={v.keywords[main]} />
+        {!publicView && <Keywords lang={main} list={v.keywords[main]} />}
       </section>
       {(allLangs ? LANGS.filter((l) => l !== v.lang && v.titles[l]) : []).map((l) => (
         <section key={l} lang={l} id={`annotatsiya-${l}`} className="mt-10 border-t border-line pt-8">

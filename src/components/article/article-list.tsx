@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { localePath } from "@/i18n/lang";
+import { articlesPageText } from "@/i18n/page-maqolalar";
 import { formatDate } from "@/lib/format";
 import type { Lang } from "@/lib/langs";
 
@@ -7,6 +9,8 @@ export type ArticleListEntry = {
   title: string;
   /** Sarlavha tili: rus va ingliz sarlavhalari ekran o‘quvchida o‘z tilida o‘qilsin */
   lang: Lang;
+  /** Sahifa tilidagi sarlavha uchun; tarjimasi bo‘sh bo‘lsa — title (asl tilda) */
+  titles: Record<Lang, string>;
   byline: string;
   publishedAt: Date | null;
   /** Portaldagi joyi: "3-son", "12-maqola" (raqamni moderator belgilaguncha bo‘lmasligi mumkin) */
@@ -21,9 +25,19 @@ export type ArticleListEntry = {
 /**
  * Maqolalar ro‘yxati — bosh sahifadagi kartalar bilan bir xil: chapda sondagi joyi, o‘ngda sana, sarlavha va mualliflar.
  * Faqat sarlavha havolasi, annotatsiyasiz (Scholar bir sahifada bir nechta annotatsiyani yoqtirmaydi). Katalogda sarlavha
- * qisqartirilmaydi. withYear — Google Scholar profilidagidek: sana o‘rnida asl nashr yili.
+ * qisqartirilmaydi. withYear — Google Scholar profilidagidek: sana o‘rnida asl nashr yili. lang — sahifa tili
+ * (matn, sana, havola va sarlavha shu tilda, tarjimasi bo‘lmasa asl tilida).
  */
-export function ArticleList({ items, withYear = false }: { items: ArticleListEntry[]; withYear?: boolean }) {
+export function ArticleList({
+  items,
+  withYear = false,
+  lang = "uz",
+}: {
+  items: ArticleListEntry[];
+  withYear?: boolean;
+  lang?: Lang;
+}) {
+  const t = articlesPageText[lang].list;
   return (
     // role="list": Tailwind list-style:none Safari/VoiceOver’da ro‘yxat ma’nosini olib tashlaydi
     <ol role="list" className="grid gap-4 lg:grid-cols-2">
@@ -35,10 +49,10 @@ export function ArticleList({ items, withYear = false }: { items: ArticleListEnt
         >
           <div className="flex w-28 shrink-0 flex-col justify-between gap-2 border-r border-line bg-mist p-3 sm:w-32 sm:p-4">
             {/* whitespace-nowrap: "6-maqola" defisdan keyin ikki qatorga bo‘linib qolmasin */}
-            <p className="text-xs whitespace-nowrap text-muted tabular-nums">{a.issueNo}-son</p>
+            <p className="text-xs whitespace-nowrap text-muted tabular-nums">{t.issue(a.issueNo)}</p>
             {a.issueSeq && (
               <p className="font-serif text-sm leading-tight font-semibold whitespace-nowrap text-lapis tabular-nums sm:text-base">
-                {a.issueSeq}-maqola
+                {t.seq(a.issueSeq)}
               </p>
             )}
           </div>
@@ -51,13 +65,13 @@ export function ArticleList({ items, withYear = false }: { items: ArticleListEnt
             ) : (
               a.publishedAt && (
                 <time dateTime={new Date(a.publishedAt).toISOString()} className="text-sm text-muted">
-                  {formatDate(a.publishedAt)}
+                  {formatDate(a.publishedAt, lang)}
                 </time>
               )
             )}
-            <h3 lang={a.lang} className="mt-1 font-serif text-lg leading-snug font-semibold">
-              <Link href={`/maqola/${a.id}`} className="group-hover:text-lapis after:absolute after:inset-0 focus-visible:outline-none!">
-                {a.title}
+            <h3 lang={a.titles[lang] ? lang : a.lang} className="mt-1 font-serif text-lg leading-snug font-semibold">
+              <Link href={localePath(lang, `/maqola/${a.id}`)} className="group-hover:text-lapis after:absolute after:inset-0 focus-visible:outline-none!">
+                {a.titles[lang] || a.title}
               </Link>
             </h3>
             <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-muted">{a.byline}</p>
