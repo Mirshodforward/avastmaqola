@@ -1,14 +1,13 @@
 import { useId, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 
-/** ORCID’dagidek alohida bo‘lim: sarlavha, izoh va ikki ustunli maydonlar */
-export function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+/** Profil bo‘limi: sarlavha va ikki ustunli maydonlar. Bo‘limlar bitta forma yuzasida chiziq bilan ajraladi (ruled) */
+export function Section({ title, ruled = true, children }: { title: string; ruled?: boolean; children: ReactNode }) {
   const id = useId();
   return (
-    <section aria-labelledby={id} className="rounded-xl border border-line bg-paper p-5 sm:p-6">
+    <section aria-labelledby={id} className={ruled ? "border-t border-line pt-8" : undefined}>
       <h2 id={id} className="font-serif text-lg font-semibold">
         {title}
       </h2>
-      {description && <p className="mt-1 text-sm text-muted">{description}</p>}
       <div className="mt-5 grid gap-5 sm:grid-cols-2">{children}</div>
     </section>
   );

@@ -37,15 +37,29 @@ export function RatingDecision({ id, status, updatedAt }: { id: number; status: 
     startTransition(() => router.refresh());
   }
 
+  // Kutayotgan iqtibos — asosiy amal (to‘ldirilgan tugma). Qaror qilinganlar tarixda: qarorni o‘zgartirish
+  // tugmasi sokin (chegarasiz), ro‘yxat bajariladigan ishlar ro‘yxatiga o‘xshab qolmasin
+  const decided = status !== "pending";
+
   return (
     <div ref={root} className="flex shrink-0 flex-col gap-2 sm:w-40">
       {status !== "approved" && (
-        <button type="button" className="btn btn-primary" aria-disabled={pending} onClick={() => decide("approve")}>
+        <button
+          type="button"
+          className={`btn ${decided ? "btn-ghost" : "btn-primary"}`}
+          aria-disabled={pending}
+          onClick={() => decide("approve")}
+        >
           {T.admin.approve}
         </button>
       )}
       {status !== "rejected" && (
-        <button type="button" className="btn btn-secondary text-danger" aria-disabled={pending} onClick={() => decide("reject")}>
+        <button
+          type="button"
+          className={`btn ${decided ? "btn-ghost" : "btn-secondary"} text-danger`}
+          aria-disabled={pending}
+          onClick={() => decide("reject")}
+        >
           {status === "approved" ? T.admin.remove : T.admin.reject}
         </button>
       )}

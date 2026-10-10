@@ -39,12 +39,8 @@ async function ProfileEditor() {
   };
 
   return (
-    <DashboardShell admin={user.role === "admin"}>
-      <h1 className="font-serif text-3xl font-semibold tracking-tight">Profil</h1>
-      <p className="mt-2 max-w-2xl text-muted">
-        Olim sifatidagi ma’lumotlaringiz ommaviy sahifangizda va har bir maqolangiz tepasida ko‘rinadi.
-        Yulduzcha (*) bilan belgilangan maydonlar majburiy.
-      </p>
+    <DashboardShell admin={user.role === "admin"} moderator={user.role === "moderator"}>
+      <h1 className="font-serif text-3xl font-semibold tracking-tight sm:text-4xl">Profil</h1>
       <ProfileForm
         initial={initial}
         initialSlug={p?.slug ?? null}

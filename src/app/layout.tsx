@@ -33,9 +33,17 @@ export const metadata: Metadata = {
   openGraph: { type: "website", siteName: SITE_NAME, locale: "uz_UZ", description },
 };
 
+// Kun/tun rejimi chizishdan oldin: saqlangan tanlov, bo‘lmasa tizim sozlamasi (tanlov yo‘qligida uning o‘zgarishi ham).
+// Statik HTML hamma uchun bir xil qoladi; JS o‘chiq bo‘lsa — kunduzgi rejim
+// Saqlash bloklangan bo‘lsa (sayt ma’lumotlari taqiqlangan, WebView) localStorage xato beradi — tizim sozlamasi baribir ishlasin
+const THEME_SCRIPT = `(function(){try{var d=document.documentElement,m=matchMedia("(prefers-color-scheme: dark)"),s=function(){try{return localStorage.getItem("theme")}catch(e){}},t=s();d.dataset.theme=t==="dark"||t==="light"?t:m.matches?"dark":"light";m.addEventListener("change",function(e){if(!s())d.dataset.theme=e.matches?"dark":"light"})}catch(e){}})()`;
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="uz" className={`${literata.variable} ${onest.variable} h-full antialiased`}>
+    <html lang="uz" className={`${literata.variable} ${onest.variable} h-full antialiased`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body className="flex min-h-full flex-col bg-mist font-sans text-ink">{children}</body>
     </html>
   );

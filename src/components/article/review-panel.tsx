@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { TextAreaField } from "@/components/profile/controls";
 import { sendJson } from "@/lib/api-client";
-import { STATUS_LABELS, type ArticleStatus } from "@/lib/article-rules";
+import type { ArticleStatus } from "@/lib/article-rules";
 import type { ApiError } from "@/lib/auth-types";
 import { issueLabel } from "@/lib/issue";
 import type { ReviewAction } from "@/server/articles/schemas";
@@ -189,7 +189,8 @@ export function ReviewPanel({
 
   return (
     <section aria-labelledby="decision-title" className="space-y-4 rounded-xl border border-line bg-paper p-5">
-      <h2 id="decision-title" ref={heading} tabIndex={-1} className="font-serif text-lg font-semibold outline-none">
+      {/* Qarordan keyin fokus shu yerga o‘tadi; sarlavha bosiladigan element emas — halqasiz (! globals.css qoidasidan ustun) */}
+      <h2 id="decision-title" ref={heading} tabIndex={-1} className="font-serif text-lg font-semibold outline-none!">
         Qaror
       </h2>
       {/* Jonli hudud doim DOM’da (display:none bo‘lsa ekran o‘quvchi e’lon qilmasligi mumkin), bo‘shida joy egallamaydi */}
@@ -198,15 +199,9 @@ export function ReviewPanel({
       </p>
       {status === "submitted" && (
         <>
-          <p className="text-sm text-muted">
-            Tekshiring: PDF ochiladimi va to‘liq maqolami, sarlavha, mualliflar va ORCID’lar PDF’dagi bilan bir xilmi,
-            annotatsiyalar to‘g‘ri tildami.
-          </p>
+          <p className="text-sm text-muted">ORCID va mualliflarni PDF bilan solishtiring.</p>
           {placeField}
-          {noteField(
-            "Izoh o‘qituvchiga",
-            "Bekor qilishda majburiy (kamida 10 belgi): o‘qituvchiga xabar bo‘lib boradi, maqola unga tuzatish uchun qaytadi.",
-          )}
+          {noteField("Izoh o‘qituvchiga", "Bekor qilishda majburiy, kamida 10 belgi.")}
           <div className="grid grid-cols-2 gap-3">
             <button type="button" className="btn btn-primary btn-lg" aria-disabled={pending} onClick={() => decide("approve")}>
               Chop etish
@@ -230,7 +225,7 @@ export function ReviewPanel({
           </button>
           {canUnpublish && (
             <>
-              {noteField("Olib tashlash sababi", "Kamida 10 belgi. Maqola o‘qituvchiga tuzatish uchun qaytadi.")}
+              {noteField("Olib tashlash sababi", "Kamida 10 belgi.")}
               <button
                 type="button"
                 className="btn btn-secondary w-full text-danger"
@@ -243,11 +238,7 @@ export function ReviewPanel({
           )}
         </>
       )}
-      {(status === "draft" || status === "rejected") && (
-        <p className="text-sm text-muted">
-          Maqola o‘qituvchida: {STATUS_LABELS[status].toLowerCase()}. Qayta yuborilgach, shu yerda qaror qabul qilasiz.
-        </p>
-      )}
+      {(status === "draft" || status === "rejected") && <p className="text-sm text-muted">Maqola o‘qituvchida.</p>}
       {error && (
         <p role="alert" className="text-sm text-danger">
           {error}

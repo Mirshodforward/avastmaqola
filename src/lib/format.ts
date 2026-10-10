@@ -1,10 +1,17 @@
+import type { Lang } from "./langs";
+
 // Server qaysi vaqt mintaqasida ishlashidan qat’i nazar sana Toshkent vaqti bilan ko‘rsatiladi
 const TZ = "Asia/Tashkent";
-const DATE = new Intl.DateTimeFormat("uz-Latn-UZ", { day: "numeric", month: "long", year: "numeric", timeZone: TZ });
+const DATE_OPTIONS = { day: "numeric", month: "long", year: "numeric", timeZone: TZ } as const;
+const DATES: Record<Lang, Intl.DateTimeFormat> = {
+  uz: new Intl.DateTimeFormat("uz-Latn-UZ", DATE_OPTIONS),
+  ru: new Intl.DateTimeFormat("ru-RU", DATE_OPTIONS),
+  en: new Intl.DateTimeFormat("en-GB", DATE_OPTIONS),
+};
 const PARTS = new Intl.DateTimeFormat("en-US", { year: "numeric", month: "numeric", day: "numeric", timeZone: TZ });
 
-export function formatDate(value: Date | string): string {
-  return DATE.format(new Date(value));
+export function formatDate(value: Date | string, lang: Lang = "uz"): string {
+  return DATES[lang].format(new Date(value));
 }
 
 /** Google Scholar formati: 2026/10/8 (oy va kun oldida nol yo‘q) */

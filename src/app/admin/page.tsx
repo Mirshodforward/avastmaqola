@@ -1,29 +1,41 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Suspense } from "react";
-import { AdminShell, Panel, Stat } from "@/components/admin/admin-shell";
+import { Suspense, type ReactNode } from "react";
+import { AdminShell, Stats } from "@/components/admin/admin-shell";
 import { BarChart } from "@/components/admin/bar-chart";
-import { formatNumber, formatShare, formatUsd, formatWait, monthLabel } from "@/components/admin/format";
+import { formatNumber, formatShare, formatUsd, monthLabel } from "@/components/admin/format";
+import { ReviewDrawer } from "@/components/admin/review-drawer";
+import { ReviewList } from "@/components/admin/review-list";
 import { DashboardSkeleton } from "@/components/dashboard/shell";
 import { ARTICLE_STATUSES, STATUS_LABELS } from "@/lib/article-rules";
 import { getOverview } from "@/server/admin/overview";
+import { textParam } from "@/server/admin/params";
+import { listReviewQueue } from "@/server/articles/review";
 import { requireAdminPage } from "@/server/auth/session";
+import { listPendingRatings } from "@/server/ratings/service";
+
+type Props = PageProps<"/admin">;
 
 export const metadata: Metadata = { title: "Admin panel", robots: { index: false } };
 
-export default function AdminOverviewPage() {
+export default function AdminOverviewPage({ searchParams }: Props) {
   return (
     <Suspense fallback={<DashboardSkeleton />}>
-      <Overview />
+      <Overview searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function Overview() {
+/** Umumiy sahifa: avval asosiy ish (navbat), keyin ko‘rsatkichlar qatori, grafiklar, kirish va AI */
+async function Overview({ searchParams }: Pick<Props, "searchParams">) {
   await requireAdminPage();
-  const { people, profiles, articles, sessions, auth, ai, months, queue } = await getOverview();
-  const thisMonth = months[months.length - 1].month;
-  const total = (key: "submitted" | "published" | "users") => formatNumber(months.reduce((sum, m) => sum + m[key], 0));
+  const [params, { people, profiles, articles, sessions, auth, ai, months }, queue, ratings] = await Promise.all([
+    searchParams,
+    getOverview(),
+    listReviewQueue(),
+    listPendingRatings(),
+  ]);
+  const total = (key: "submitted" | "published" | "users") => months.reduce((sum, m) => sum + m[key], 0);
   const point = (m: (typeof months)[number], values: number[]) => ({
     key: m.month,
     label: monthLabel(m.month),
@@ -32,137 +44,153 @@ async function Overview() {
   });
 
   return (
-    <AdminShell
-      current="overview"
-      title="Umumiy ko‘rsatkichlar"
-      lead="Toshkent vaqti bilan. “7 kun” va “30 kun” — bugun bilan birga."
-    >
-      <dl className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat
-          label="O‘qituvchilar"
-          href="/admin/teachers"
-          value={formatNumber(people.total)}
-          detail={`+${formatNumber(people.new30)} so‘nggi 30 kunda${people.admins ? ` · adminlar: ${formatNumber(people.admins)}` : ""}`}
-        />
-        <Stat
-          label="Profil to‘ldirgan"
-          value={formatNumber(profiles.filled)}
-          detail={`${formatShare(profiles.filled, people.total)} · ochiq: ${formatNumber(profiles.open)}`}
-        />
-        <Stat
-          label="Ko‘rib chiqish navbati"
-          href="/admin/queue"
-          value={formatNumber(articles.submitted)}
-          detail={
-            articles.oldestWaitHours === null
-              ? "Navbat bo‘sh"
-              : `Eng eskisi ${formatWait(articles.oldestWaitHours)} kutmoqda`
-          }
-        />
-        <Stat
-          label="Shu oy chop etilgan"
-          value={formatNumber(articles.publishedThisMonth)}
-          detail={`${monthLabel(thisMonth, true)} · hozir saytda: ${formatNumber(articles.published)}`}
-        />
-        <Stat
-          label="Faol sessiyalar"
-          value={formatNumber(sessions.active)}
-          detail={`${formatNumber(sessions.people)} foydalanuvchi`}
-        />
-        <Stat
-          label="Kirish va ro‘yxatdan o‘tish, 7 kun"
-          value={formatNumber(auth.total)}
-          detail={`${formatNumber(auth.verified)} muvaffaqiyatli · ${formatNumber(auth.failed)} muvaffaqiyatsiz · ${formatNumber(auth.abandoned)} muddati o‘tgan`}
-        />
-        <Stat
-          label="AI so‘rovlar bugun"
-          href="/admin/ai"
-          value={formatNumber(ai.today)}
-          detail={`30 kunda: ${formatNumber(ai.month)} · xato: ${formatShare(ai.errors, ai.month)}`}
-        />
-        <Stat
-          label="AI xarajati, 30 kun"
-          value={formatUsd(ai.costMicroUsd)}
-          detail={`taxminiy · ${formatNumber(ai.tokens)} token`}
-        />
-      </dl>
+    <AdminShell current="overview" title="Umumiy ko‘rsatkichlar">
+      <Section
+        id="queue-title"
+        title="Ko‘rib chiqish navbati"
+        count={queue.length}
+        action={
+          queue.length > 0 && (
+            <Link href="/admin/queue" className="link text-sm">
+              Butun navbat
+            </Link>
+          )
+        }
+        className="mt-8"
+      >
+        {queue.length ? (
+          <ReviewList items={queue.slice(0, 5)} href={(id) => `/admin?view=${id}`} className="mt-4" />
+        ) : (
+          <p className="mt-3 text-muted">Navbat bo‘sh.</p>
+        )}
+      </Section>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <Panel
-          id="articles-title"
-          title="Maqolalar"
-          note="Qoralamalar faqat muallifga ko‘rinadi — bu yerda faqat ularning soni."
-        >
-          <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {ARTICLE_STATUSES.map((s) => (
-              <div key={s} className="relative rounded-lg bg-mist px-4 py-3">
-                <dt className="text-xs text-muted">
+      <Stats
+        className="mt-12"
+        items={[
+          {
+            label: "Shu oy chop etilgan",
+            value: formatNumber(articles.publishedThisMonth),
+            detail: `saytda jami ${formatNumber(articles.published)}`,
+          },
+          {
+            label: "O‘qituvchilar",
+            href: "/admin/teachers",
+            value: formatNumber(people.total),
+            detail: `+${formatNumber(people.new30)}, 30 kunda${people.admins ? ` · ${formatNumber(people.admins)} admin` : ""}`,
+          },
+          {
+            label: "Profil to‘ldirgan",
+            value: formatNumber(profiles.filled),
+            detail: `${formatShare(profiles.filled, people.total)} · ochiq ${formatNumber(profiles.open)}`,
+          },
+          { label: "Iqtiboslar kutmoqda", href: "/admin/iqtiboslar", value: formatNumber(ratings.length) },
+        ]}
+      />
+
+      <div className="mt-12 grid gap-x-12 gap-y-12 lg:grid-cols-2">
+        <Section id="articles-title" title="Maqolalar">
+          <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm">
+            {ARTICLE_STATUSES.map((s) => {
+              const label = (
+                <>
+                  <span className="text-muted group-hover:text-lapis">{STATUS_LABELS[s]}</span>{" "}
+                  <span className="font-semibold tabular-nums group-hover:text-lapis">{formatNumber(articles[s])}</span>
+                </>
+              );
+              // Qoralama faqat muallifniki: adminda ro‘yxati yo‘q, faqat soni
+              return (
+                <li key={s}>
                   {s === "draft" ? (
-                    STATUS_LABELS[s]
+                    label
                   ) : (
-                    <Link
-                      href={`/admin/articles?status=${s}`}
-                      className="after:absolute after:inset-0 after:rounded-lg hover:text-lapis"
-                    >
-                      {STATUS_LABELS[s]}
+                    <Link href={`/admin/articles?status=${s}`} className="group">
+                      {label}
                     </Link>
                   )}
-                </dt>
-                <dd className="mt-1 font-serif text-2xl font-semibold tabular-nums">{formatNumber(articles[s])}</dd>
-              </div>
-            ))}
-          </dl>
-          <h3 className="mt-8 font-medium">So‘nggi 12 oy</h3>
-          <p className="mt-1 text-sm text-muted">
-            Yuborilgan: {total("submitted")}, chop etilgan: {total("published")}. Qayta yuborilgan maqola oxirgi
-            yuborilgan oyida sanaladi.
-          </p>
+                </li>
+              );
+            })}
+          </ul>
           <BarChart
             series={["Yuborilgan", "Chop etilgan"]}
+            totals={[total("submitted"), total("published")]}
             points={months.map((m) => point(m, [m.submitted, m.published]))}
             tableLabel="Maqolalar oylar bo‘yicha"
           />
-        </Panel>
+        </Section>
 
-        <div className="grid min-w-0 content-start gap-6">
-          <Panel
-            id="waiting-title"
-            title="Navbatda kutayotganlar"
-            note="Eng uzoq kutayotgan 5 ta maqola"
-            action={
-              <Link href="/admin/queue" className="link text-sm">
-                Butun navbat
-              </Link>
-            }
-          >
-            {queue.length ? (
-              <ol className="mt-3 divide-y divide-line">
-                {queue.map((a) => (
-                  <li key={a.id} className="flex items-start justify-between gap-3 py-3">
-                    <div className="min-w-0">
-                      <Link href={`/admin/articles/${a.id}`} className="break-words font-medium hover:text-lapis">
-                        №{a.id}. {a.title}
-                      </Link>
-                      <p className="mt-0.5 text-sm text-muted">{a.author}</p>
-                    </div>
-                    <span className="shrink-0 whitespace-nowrap text-sm text-muted">{formatWait(a.waitedHours)}</span>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className="mt-4 text-muted">Navbat bo‘sh.</p>
-            )}
-          </Panel>
-
-          <Panel id="signups-title" title="Yangi o‘qituvchilar" note={`So‘nggi 12 oyda: ${total("users")}`}>
-            <BarChart
-              series={["Ro‘yxatdan o‘tganlar"]}
-              points={months.map((m) => point(m, [m.users]))}
-              tableLabel="Yangi o‘qituvchilar oylar bo‘yicha"
-            />
-          </Panel>
-        </div>
+        <Section id="signups-title" title="Yangi o‘qituvchilar">
+          <BarChart
+            series={["Ro‘yxatdan o‘tganlar"]}
+            totals={[total("users")]}
+            points={months.map((m) => point(m, [m.users]))}
+            tableLabel="Yangi o‘qituvchilar oylar bo‘yicha"
+          />
+        </Section>
       </div>
+
+      <Section id="system-title" title="Kirish va AI" className="mt-12">
+        <Stats
+          size="sm"
+          className="mt-4"
+          items={[
+            {
+              label: "Faol sessiyalar",
+              value: formatNumber(sessions.active),
+              detail: `${formatNumber(sessions.people)} foydalanuvchi`,
+            },
+            {
+              label: "Kirish va ro‘yxatdan o‘tish, 7 kun",
+              value: formatNumber(auth.total),
+              detail: `${formatNumber(auth.verified)} muvaffaqiyatli · ${formatNumber(auth.failed)} muvaffaqiyatsiz · ${formatNumber(auth.abandoned)} muddati o‘tgan`,
+            },
+            {
+              label: "AI so‘rovlar, bugun",
+              href: "/admin/ai",
+              value: formatNumber(ai.today),
+              detail: `30 kunda ${formatNumber(ai.month)} · xato ${formatShare(ai.errors, ai.month)}`,
+            },
+            {
+              label: "AI xarajati, 30 kun",
+              value: formatUsd(ai.costMicroUsd),
+              detail: `taxminiy · ${formatNumber(ai.tokens)} token`,
+            },
+          ]}
+        />
+      </Section>
+
+      <ReviewDrawer view={textParam(params, "view") || null} closeHref="/admin" />
     </AdminShell>
+  );
+}
+
+/** Bo‘lim: serif sarlavha, yonida ixtiyoriy son (kulrang) va o‘ngda havola */
+function Section({
+  id,
+  title,
+  count,
+  action,
+  className = "",
+  children,
+}: {
+  id: string;
+  title: string;
+  count?: number;
+  action?: ReactNode;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section aria-labelledby={id} className={`min-w-0 ${className}`}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+        <h2 id={id} className="font-serif text-xl font-semibold">
+          {title}
+          {count !== undefined && count > 0 && <span className="ml-2 tabular-nums text-muted">{formatNumber(count)}</span>}
+        </h2>
+        {action}
+      </div>
+      {children}
+    </section>
   );
 }

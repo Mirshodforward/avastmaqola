@@ -34,25 +34,21 @@ async function Review({ params }: Pick<Props, "params">) {
   const v = id ? await loadArticleView(id, false) : null;
   if (!v || v.status === "draft") notFound();
   const place = await issuePlaceStatus(v.id, v.issueNo, v.issueSeq);
+  // Telegram havolasi bilan kelinadi: yuborilgan maqola — navbatdan, qolganlari — «Maqolalar»dan
+  const queued = v.status === "submitted";
 
   return (
     <DashboardShell admin>
-      <AdminNav />
-      <Link href="/admin/queue" className="link mt-6 inline-block text-sm">
-        ← Navbat
+      <AdminNav current={queued ? "queue" : "articles"} />
+      <Link href={queued ? "/admin/queue" : "/admin/articles"} className="link mt-6 inline-block text-sm">
+        ← {queued ? "Navbat" : "Maqolalar"}
       </Link>
       <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
         {/* Telefonda maqola (mx-auto) uzun BibTeX qatori yoki bo‘linmas so‘z bilan sahifadan kengayib ketmasin */}
         <div className="min-w-0 break-words">
-          <ArticleView v={v} absoluteUrl={articleUrl(v.id)} preview={v.status !== "published"} />
+          <ArticleView v={v} absoluteUrl={articleUrl(v.id)} preview={v.status !== "published"} allLangs />
         </div>
         <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-          {v.pdfBytes !== null && v.pdfBytes > ARTICLE_LIMITS.pdfScholarBytes && (
-            <p className="rounded-xl border border-line bg-paper p-4 text-sm text-muted">
-              PDF {formatBytes(v.pdfBytes)}: 5 MB dan katta faylni Google Scholar o‘qimasligi mumkin. O‘qituvchidan
-              siqilgan nusxa so‘rash mumkin.
-            </p>
-          )}
           <ReviewPanel
             id={v.id}
             status={v.status}
@@ -60,6 +56,10 @@ async function Review({ params }: Pick<Props, "params">) {
             place={{ issueNo: v.issueNo, issueSeq: v.issueSeq, ...place }}
             zenodoDoi={v.zenodoDoi ?? null}
           />
+          {/* Paneldagi bilan bir xil ogohlantirish */}
+          {v.pdfBytes !== null && v.pdfBytes > ARTICLE_LIMITS.pdfScholarBytes && (
+            <p className="text-sm text-muted">PDF {formatBytes(v.pdfBytes)} — Google Scholar uchun katta (5 MB gacha).</p>
+          )}
         </aside>
       </div>
     </DashboardShell>

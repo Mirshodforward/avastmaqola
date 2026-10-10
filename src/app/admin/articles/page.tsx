@@ -6,7 +6,7 @@ import { AdminShell } from "@/components/admin/admin-shell";
 import { formatNumber } from "@/components/admin/format";
 import { Pagination, withParams } from "@/components/admin/pagination";
 import { ReviewDrawer } from "@/components/admin/review-drawer";
-import { TableFrame } from "@/components/admin/table";
+import { TableFrame, td, th } from "@/components/admin/table";
 import { StatusChip } from "@/components/article/status-chip";
 import { DashboardSkeleton } from "@/components/dashboard/shell";
 import { STATUS_LABELS } from "@/lib/article-rules";
@@ -27,8 +27,8 @@ export default function AdminArticlesPage({ searchParams }: Props) {
   );
 }
 
-const th = "whitespace-nowrap border-b border-line bg-mist px-5 py-3 text-sm font-medium text-muted";
-const td = "border-b border-line px-5 py-4 align-middle";
+// Keng ekranda (lg) holat va sanalar alohida ustunlarda; torroqda — sarlavha ostida, jadval sahifaga sig‘adi
+const wide = "max-lg:hidden";
 
 async function Articles({ searchParams }: Pick<Props, "searchParams">) {
   await requireAdminPage();
@@ -44,11 +44,8 @@ async function Articles({ searchParams }: Pick<Props, "searchParams">) {
   ];
 
   return (
-    <AdminShell
-      current="articles"
-      title="Maqolalar"
-      lead={`Yuborilgan, chop etilgan va bekor qilingan maqolalar. «Ko‘rish» maqolani yon panelda ochadi — u yerda chop etish yoki izoh bilan bekor qilish mumkin. Qoralamalar faqat muallifga ko‘rinadi (hozir ${formatNumber(counts.draft)} ta).`}
-    >
+    <AdminShell current="articles" title="Maqolalar">
+      {/* Kabinetdagi «Maqolalarim» filtri bilan bir xil ko‘rinish */}
       <nav aria-label="Holat bo‘yicha" className="mt-8 flex flex-wrap gap-2">
         {tabs.map((t) => {
           const active = filters.status === t.status;
@@ -57,7 +54,7 @@ async function Articles({ searchParams }: Pick<Props, "searchParams">) {
               key={t.label}
               href={withParams("/admin/articles", { status: t.status, q: filters.q })}
               aria-current={active ? "true" : undefined}
-              className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-base font-medium ${
+              className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium ${
                 active ? "border-lapis bg-lapis text-on-lapis" : "border-line bg-paper hover:border-lapis"
               }`}
             >
@@ -68,13 +65,14 @@ async function Articles({ searchParams }: Pick<Props, "searchParams">) {
         })}
       </nav>
 
-      {/* key: filtr o‘zgarganda (masalan, "Tozalash") maydon URL’dagi qiymat bilan qayta chiziladi */}
+      {/* key: filtr o‘zgarganda (masalan, "Tozalash") maydon URL’dagi qiymat bilan qayta chiziladi.
+          items-stretch: tugma maydon balandligida */}
       <Form
         key={`${filters.status}|${filters.q}`}
         action="/admin/articles"
         role="search"
         aria-label="Maqolalarni qidirish"
-        className="mt-5 flex flex-wrap items-center gap-3"
+        className="mt-5 flex flex-wrap items-stretch gap-3"
       >
         {filters.status && <input type="hidden" name="status" value={filters.status} />}
         <label className="sr-only" htmlFor="admin-articles-q">
@@ -86,8 +84,8 @@ async function Articles({ searchParams }: Pick<Props, "searchParams">) {
           name="q"
           defaultValue={filters.q}
           maxLength={100}
-          placeholder="Sarlavha, muallif yoki № bo‘yicha qidirish"
-          className="input w-full sm:w-[28rem]"
+          placeholder="Sarlavha, muallif yoki №"
+          className="input w-full placeholder:text-muted sm:w-[28rem]"
         />
         <button type="submit" className="btn btn-primary">
           Qidirish
@@ -99,11 +97,9 @@ async function Articles({ searchParams }: Pick<Props, "searchParams">) {
         )}
       </Form>
 
-      <p className="mt-6 text-sm text-muted">
-        {filters.q ? "Topildi" : "Jami"}: {formatNumber(total)} ta maqola
-      </p>
+      {filters.q && <p className="mt-6 text-sm text-muted">Topildi: {formatNumber(total)} ta maqola</p>}
       {items.length ? (
-        <TableFrame label="Maqolalar ro‘yxati" minWidth="min-w-[56rem]">
+        <TableFrame label="Maqolalar ro‘yxati" minWidth="min-w-0">
           <thead>
             <tr>
               <th scope="col" className={th}>
@@ -112,50 +108,49 @@ async function Articles({ searchParams }: Pick<Props, "searchParams">) {
               <th scope="col" className={th}>
                 Maqola
               </th>
-              <th scope="col" className={th}>
+              <th scope="col" className={`${th} ${wide}`}>
                 Holat
               </th>
-              <th scope="col" className={th}>
+              <th scope="col" className={`${th} ${wide}`}>
                 Yuborilgan
               </th>
-              <th scope="col" className={th}>
+              <th scope="col" className={`${th} ${wide}`}>
                 Chop etilgan
-              </th>
-              <th scope="col" className={th}>
-                <span className="sr-only">Amal</span>
               </th>
             </tr>
           </thead>
-          <tbody className="text-base">
+          <tbody>
             {items.map((a) => (
-              // Qatorning istalgan joyini bosish «Ko‘rish»ni ochadi (klaviaturada esa bitta tugma)
-              <tr key={a.id} className="relative hover:bg-mist/60">
+              // Sarlavha — havola, butun qator bosiladi (panel ochiladi)
+              <tr key={a.id} className="relative">
                 <td className={`${td} tabular-nums text-muted`}>{a.id}</td>
-                <td className={`${td} min-w-80`}>
-                  <p className="font-medium leading-snug">{a.title}</p>
-                  <p className="mt-0.5 text-sm text-muted">{a.author}</p>
-                </td>
                 <td className={td}>
-                  <StatusChip status={a.status} />
-                </td>
-                <td className={`${td} whitespace-nowrap text-sm`}>{a.submittedAt ? formatDate(a.submittedAt) : "—"}</td>
-                <td className={`${td} whitespace-nowrap text-sm`}>{a.publishedAt ? formatDate(a.publishedAt) : "—"}</td>
-                <td className={`${td} text-right`}>
                   <Link
                     href={listHref({ view: a.id })}
                     scroll={false}
-                    aria-label={`Ko‘rish: №${a.id}. ${a.title}`}
-                    className="btn btn-secondary after:absolute after:inset-0"
+                    data-review-id={a.id}
+                    className="text-base font-medium leading-snug after:absolute after:inset-0 hover:text-lapis"
                   >
-                    Ko‘rish
+                    {a.title}
                   </Link>
+                  <p className="mt-0.5 text-muted">{a.author}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-muted lg:hidden">
+                    <StatusChip status={a.status} />
+                    {a.submittedAt && <span>Yuborilgan: {formatDate(a.submittedAt)}</span>}
+                    {a.publishedAt && <span>Chop etilgan: {formatDate(a.publishedAt)}</span>}
+                  </div>
                 </td>
+                <td className={`${td} ${wide}`}>
+                  <StatusChip status={a.status} />
+                </td>
+                <td className={`${td} ${wide} whitespace-nowrap`}>{a.submittedAt ? formatDate(a.submittedAt) : "—"}</td>
+                <td className={`${td} ${wide} whitespace-nowrap`}>{a.publishedAt ? formatDate(a.publishedAt) : "—"}</td>
               </tr>
             ))}
           </tbody>
         </TableFrame>
       ) : (
-        <p className="mt-4 rounded-xl border border-line bg-paper p-5 text-muted">
+        <p className="mt-6 text-muted">
           {filters.status || filters.q ? "Bu shartlarga mos maqola topilmadi." : "Hali ko‘rib chiqishga yuborilgan maqola yo‘q."}
         </p>
       )}

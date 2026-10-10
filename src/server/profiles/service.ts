@@ -92,6 +92,12 @@ export async function saveProfile(userId: string, input: ProfileInput) {
   return { slug };
 }
 
+/** Kabinet header’idagi rasm uchun: profil yoki rasm bo‘lmasa null */
+export async function getProfilePhotoKey(userId: string) {
+  const [row] = await db.select({ photoKey: profiles.photoKey }).from(profiles).where(eq(profiles.userId, userId)).limit(1);
+  return row?.photoKey ?? null;
+}
+
 const avatarFiles = (key: string) => [`${key}-512.webp`, `${key}-128.webp`];
 
 export async function setProfilePhoto(userId: string, file: File) {

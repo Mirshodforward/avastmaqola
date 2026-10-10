@@ -1,9 +1,10 @@
 import { formatNumber } from "./format";
 import { TableFrame, numeric, th } from "./table";
 
-// dataviz palitrasining 1–2-o‘rinlari, yorug‘ va qorong‘i rejim uchun alohida qadamlar: fonga nisbatan
-// kontrast va rang ko‘rmaslik (protan/deutan) simulyatsiyasida bir-biridan ajralishi skript bilan tekshirilgan
-const COLORS = ["bg-[#2a78d6] dark:bg-[#3987e5]", "bg-[#eb6834] dark:bg-[#d95926]"] as const;
+// Brend oilasidagi juftlik: lapis-ko‘k (yuborilgan) va tile-moviy (chop etilgan — holat belgisidagi rang bilan bir xil).
+// Yorug‘ va qorong‘i rejim uchun alohida qadamlar; dataviz validate_palette.js bilan tekshirilgan: sahifa foni (mist)
+// va oq fonda kontrast >= 3:1, rang ko‘rmaslik (deutan ΔE 18 / 16) va oddiy ko‘zda ajralish — hammasi o‘tgan
+const COLORS = ["bg-[#3b5fc4] dark:bg-[#4f78dc]", "bg-[#009690] dark:bg-[#0f9a8a]"] as const;
 
 export type ChartPoint = {
   key: string;
@@ -27,17 +28,20 @@ function scaleTicks(max: number): number[] {
  * Ustunli diagramma: kutubxonasiz, serverda HTML/CSS. Rasm qismi ekran o‘quvchidan yashirilgan —
  * qiymatlar "Jadval ko‘rinishi"da (klaviatura va ekran o‘quvchi uchun), sichqonchada esa maslahat oynasida.
  * labelEvery — o‘q yozuvlari har N-ustunda, oxirgisidan (bugun / joriy oy) boshlab sanaladi.
+ * totals — davr bo‘yicha jami, legendada nom yonida ("Yuborilgan 8"); berilsa legenda bitta qatorda ham ko‘rinadi.
  */
 export function BarChart({
   series,
   points,
   tableLabel,
   labelEvery = 1,
+  totals,
 }: {
   series: string[];
   points: ChartPoint[];
   tableLabel: string;
   labelEvery?: number;
+  totals?: number[];
 }) {
   const max = Math.max(0, ...points.flatMap((p) => p.values));
   const ticks = scaleTicks(max);
@@ -50,18 +54,19 @@ export function BarChart({
 
   return (
     <div className="mt-4">
-      {series.length > 1 && (
+      {(series.length > 1 || totals) && (
         <ul className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
           {series.map((name, s) => (
             <li key={name} className="flex items-center gap-2">
               <span aria-hidden="true" className={`size-3 rounded-sm ${COLORS[s]}`} />
               {name}
+              {totals && <span className="font-semibold tabular-nums">{formatNumber(totals[s])}</span>}
             </li>
           ))}
         </ul>
       )}
 
-      <div aria-hidden="true" className="mt-5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 text-[11px] text-muted">
+      <div aria-hidden="true" className="mt-5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 text-xs text-muted">
         <div className="relative tabular-nums">
           {/* Ustun kengligi eng uzun yozuvga teng bo‘lsin */}
           <span className="invisible">{formatNumber(top)}</span>
@@ -85,7 +90,7 @@ export function BarChart({
             {points.map((p, i) => (
               <div
                 key={p.key}
-                className={`group relative flex h-full flex-1 items-end justify-center gap-0.5 hover:bg-mist ${series.length > 1 ? "px-1" : "px-px"}`}
+                className={`group relative flex h-full flex-1 items-end justify-center gap-0.5 hover:bg-ink/5 ${series.length > 1 ? "px-1" : "px-px"}`}
               >
                 {p.values.map((value, s) => (
                   <div
@@ -115,8 +120,13 @@ export function BarChart({
         <div className="flex">
           {points.map((p, i) => (
             <div key={p.key} className="relative h-6 flex-1">
+              {/* Chetdagi yozuv grafik chegarasidan chiqmasin: oxirgisi o‘ng chetga tekislanadi */}
               {(last - i) % labelEvery === 0 && (
-                <span className="absolute left-1/2 top-1.5 -translate-x-1/2 whitespace-nowrap">{p.label}</span>
+                <span
+                  className={`absolute top-1.5 whitespace-nowrap ${i === last ? "right-0" : "left-1/2 -translate-x-1/2"}`}
+                >
+                  {p.label}
+                </span>
               )}
             </div>
           ))}
@@ -124,7 +134,7 @@ export function BarChart({
       </div>
 
       <details className="mt-2 text-sm">
-        <summary className="cursor-pointer text-muted hover:text-ink">Jadval ko‘rinishi</summary>
+        <summary className="w-fit cursor-pointer py-1 text-muted hover:text-ink">Jadval ko‘rinishi</summary>
         <TableFrame label={tableLabel} minWidth="min-w-0">
           <thead>
             <tr>

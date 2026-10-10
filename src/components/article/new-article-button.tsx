@@ -4,8 +4,12 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { postJson } from "@/lib/api-client";
 
-/** Qoralama bosilganda yaratiladi (GET’da emas): saqlash uchun darhol manzil bo‘ladi */
-export function NewArticleButton() {
+/**
+ * Qoralama bosilganda yaratiladi (GET’da emas): saqlash uchun darhol manzil bo‘ladi.
+ * Hech narsa yozilmagan qoralama bo‘lsa, server o‘shani qaytaradi.
+ * variant="tile" — kabinetdagi katta asosiy harakat.
+ */
+export function NewArticleButton({ variant = "button" }: { variant?: "button" | "tile" }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   // Cache Components kabinetni <Activity> ichida saqlaydi: "Orqaga"da tugma "Ochilmoqda…" holatida qotib qolmasin,
@@ -24,11 +28,28 @@ export function NewArticleButton() {
     else setError(res.error.message);
   }
 
+  const label = pending ? "Ochilmoqda…" : "Yangi maqola";
   return (
-    <div>
-      <button type="button" className="btn btn-primary" aria-disabled={pending} onClick={create}>
-        {pending ? "Ochilmoqda…" : "Yangi maqola"}
-      </button>
+    <div className={variant === "tile" ? "h-full" : undefined}>
+      {variant === "tile" ? (
+        <button
+          type="button"
+          aria-disabled={pending}
+          onClick={create}
+          className="flex h-full min-h-28 w-full items-center gap-4 rounded-xl bg-lapis px-6 py-5 text-left text-on-lapis transition-colors hover:bg-lapis-deep aria-disabled:cursor-progress"
+        >
+          <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-full border border-on-lapis/40">
+            <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </span>
+          <span className="font-serif text-xl font-semibold">{label}</span>
+        </button>
+      ) : (
+        <button type="button" className="btn btn-primary" aria-disabled={pending} onClick={create}>
+          {label}
+        </button>
+      )}
       {error && (
         <p role="alert" className="mt-2 text-sm text-danger">
           {error}

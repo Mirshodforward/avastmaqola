@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Tungi rejim <html data-theme="dark"> bilan: layout’dagi skript chizishdan oldin saqlangan tanlov yoki tizim sozlamasini qo‘yadi */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
 :root {
   /* Samarqand koshinlaridan: lojuvard (asosiy) va firuza (urg‘u) */
   --mist: #f1f4f9;
@@ -20,23 +23,21 @@
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --mist: #0d1424;
-    --paper: #141d31;
-    --ink: #e6ebf5;
-    --muted: #9aa6bd;
-    --line: #2a3650;
-    --input-border: #5d6b87;
-    --lapis: #8fb0ff;
-    --lapis-deep: #b8ccff;
-    --on-lapis: #0d1424;
-    --tile: #4fc2c0;
-    --tile-soft: #12302f;
-    --danger: #ff8a80;
-    --danger-soft: #3a1714;
-    color-scheme: dark;
-  }
+:root[data-theme="dark"] {
+  --mist: #0d1424;
+  --paper: #141d31;
+  --ink: #e6ebf5;
+  --muted: #9aa6bd;
+  --line: #2a3650;
+  --input-border: #5d6b87;
+  --lapis: #8fb0ff;
+  --lapis-deep: #b8ccff;
+  --on-lapis: #0d1424;
+  --tile: #4fc2c0;
+  --tile-soft: #12302f;
+  --danger: #ff8a80;
+  --danger-soft: #3a1714;
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -94,8 +95,8 @@ html {
 }
 .asman-rise {
   animation:
-    asman-rise 1.4s cubic-bezier(0.2, 0.7, 0.2, 1) both,
-    asman-float 7s ease-in-out 1.6s infinite;
+    asman-rise 1.4s cubic-bezier(0.2, 0.7, 0.2, 1) 0.15s both,
+    asman-float 7s ease-in-out 1.75s infinite;
 }
 
 /* Hero: osmon (yuqori) va yer (pastki oq blok). Ufq — yerning yuqori cheti: chiziq chapdan o‘ngga chiziladi.
@@ -103,7 +104,7 @@ html {
    shuning uchun qorong‘i mavzuda ham o‘zi moslashadi */
 .home-sky {
   background:
-    radial-gradient(70rem 26rem at 80% 100%, color-mix(in oklab, var(--tile) 13%, transparent), transparent 72%),
+    radial-gradient(60rem 34rem at 80% 52%, color-mix(in oklab, var(--tile) 13%, transparent), transparent 72%),
     linear-gradient(to bottom, var(--mist), color-mix(in oklab, var(--lapis) 7%, var(--mist)));
 }
 .home-ground {
@@ -128,17 +129,158 @@ html {
 }
 
 /* Yopishqoq header: sahifa boshida chiziqsiz, ~100px scroll’dan keyin pastki chiziq paydo bo‘ladi.
-   Scroll bilan bog‘langan animatsiyani bilmaydigan brauzerda chiziq bo‘lmaydi (fon xiralashuvi saqlanadi) */
+   Scroll bilan bog‘langan animatsiyani bilmaydigan brauzerda chiziq doim ko‘rinadi (asosiy rang — border-line) */
 @keyframes home-header-edge {
-  to {
-    border-bottom-color: var(--line);
+  from {
+    border-bottom-color: transparent;
   }
+}
+/* Yopishqoq header fokuslangan elementni va #bo‘lim havolalarini yopib qo‘ymasin (WCAG 2.4.11) */
+html:has(.home-header) {
+  scroll-padding-top: 5rem;
 }
 @supports (animation-timeline: scroll()) {
   .home-header {
     animation: home-header-edge linear both;
     animation-timeline: scroll(root);
     animation-range: 0 100px;
+  }
+}
+
+/* ── Bosh sahifa harakati ────────────────────────────────────────────────────────────────────────────────
+   Mavzu — ufq: chiziqlar chapdan o‘ngga chiziladi, bloklar ufqdan ko‘tarilgandek chiqadi, belgilar ketma-ket paydo bo‘ladi.
+   1) Yuklanganda (l-*): hero ketma-ket — header, sarlavha, matn, tugmalar, logo, ufq chizig‘i, raqamlar.
+   2) Scroll’da (m-*): har bir blok o‘z o‘rniga kirayotganda, scroll bilan birga (CSS scroll-driven, JavaScript yo‘q).
+   Faqat transform / opacity / stroke-dashoffset: sahifa siljimaydi (CLS 0). Harakat cheklangan bo‘lsa yoki brauzer scroll
+   animatsiyasini bilmasa — animatsiya yo‘q, mazmun darhol to‘liq ko‘rinadi (hech narsa yashirin qolmaydi).
+   --i: ketma-ketlik tartibi (diapazon siljishi), --d: yuklanishdagi kechikish. */
+@keyframes l-in {
+  from {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+}
+@keyframes l-down {
+  from {
+    opacity: 0;
+    transform: translateY(-0.75rem);
+  }
+}
+@keyframes m-rise {
+  from {
+    opacity: 0;
+    transform: translateY(2rem);
+  }
+}
+@keyframes m-slide {
+  from {
+    opacity: 0;
+    transform: translateX(1.5rem);
+  }
+}
+@keyframes m-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+}
+@keyframes m-draw-x {
+  from {
+    transform: scaleX(0);
+  }
+}
+@keyframes m-draw-y {
+  from {
+    transform: scaleY(0);
+  }
+}
+@keyframes m-stroke {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+@keyframes hero-recede {
+  to {
+    opacity: 0;
+    transform: translateY(-2.5rem);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .l-in {
+    animation: l-in 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) var(--d, 0s) both;
+  }
+  .l-down {
+    animation: l-down 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    /* Vaqt chizig‘ini e’lon qiluvchilar: sec — bo‘lim, grp — guruh (ro‘yxat, karta, sxema). 1px chiziq yoki 24px belgi
+       o‘z view()’ida bir zumda tugaydi, shuning uchun ular ota blokning vaqt chizig‘iga ulanadi (tl-*) */
+    .vt-sec {
+      view-timeline: --sec block;
+    }
+    .vt-grp {
+      view-timeline: --grp block;
+    }
+
+    .m-rise {
+      animation: m-rise cubic-bezier(0.2, 0.7, 0.2, 1) both;
+      animation-timeline: view();
+      animation-range: entry calc(var(--i, 0) * 6%) entry calc(45% + var(--i, 0) * 6%);
+    }
+    .m-slide {
+      animation: m-slide cubic-bezier(0.2, 0.7, 0.2, 1) both;
+      animation-timeline: view();
+      animation-range: entry calc(var(--i, 0) * 5%) entry calc(50% + var(--i, 0) * 5%);
+    }
+    .m-pop {
+      animation: m-pop cubic-bezier(0.34, 1.56, 0.64, 1) both;
+      animation-timeline: view();
+      animation-range: entry calc(10% + var(--i, 0) * 8%) entry calc(40% + var(--i, 0) * 8%);
+    }
+    .m-line {
+      transform-origin: left;
+      animation: m-draw-x cubic-bezier(0.2, 0.7, 0.2, 1) both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 45%;
+    }
+    /* Jarayon chizig‘i: telefonda tik (yuqoridan pastga), kompyuterda gorizontal */
+    .m-connector {
+      transform-origin: top;
+      animation: m-draw-y cubic-bezier(0.2, 0.7, 0.2, 1) both;
+      animation-timeline: view();
+      animation-range: entry calc(var(--i, 0) * 8%) entry calc(50% + var(--i, 0) * 8%);
+    }
+    @media (min-width: 64rem) {
+      .m-connector {
+        transform-origin: left;
+        animation-name: m-draw-x;
+      }
+    }
+    .m-stroke {
+      stroke-dasharray: 1;
+      animation: m-stroke cubic-bezier(0.2, 0.7, 0.2, 1) both;
+      animation-timeline: view();
+      animation-range: entry calc(var(--i, 0) * 8%) entry calc(60% + var(--i, 0) * 8%);
+    }
+
+    /* Ota blokning vaqt chizig‘idan foydalanish: yuqoridagi qoidalardan KEYIN turishi shart (shorthand timeline’ni tiklaydi) */
+    .tl-sec {
+      animation-timeline: --sec;
+    }
+    .tl-grp {
+      animation-timeline: --grp;
+    }
+
+    /* Hero scroll’da sekin so‘nadi va yuqoriga siljiydi (osmon uzoqlashayotgandek) */
+    .hero-recede {
+      animation: hero-recede linear both;
+      animation-timeline: scroll(root);
+      animation-range: 0 55svh;
+    }
   }
 }
 

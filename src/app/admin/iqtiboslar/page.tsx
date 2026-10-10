@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { AdminShell } from "@/components/admin/admin-shell";
+import { Chip, type ChipTone } from "@/components/article/status-chip";
 import { DashboardSkeleton } from "@/components/dashboard/shell";
 import { RatingDecision } from "@/components/rating/rating-decision";
 import { Stars } from "@/components/rating/stars";
@@ -29,11 +30,7 @@ async function Ratings() {
 
   return (
     <AdminShell current="ratings" title={T.admin.title}>
-      {pending.length ? (
-        <Items items={pending} />
-      ) : (
-        <p className="mt-6 rounded-xl border border-line bg-paper p-5 text-muted">{T.admin.empty}</p>
-      )}
+      {pending.length ? <Items items={pending} /> : <p className="mt-6 text-muted">{T.admin.empty}</p>}
 
       {recent.length > 0 && (
         <section aria-labelledby="recent-title" className="mt-12">
@@ -47,26 +44,18 @@ async function Ratings() {
   );
 }
 
-const CHIP: Record<RatingStatus, string> = {
-  pending: "border-lapis/40 text-lapis",
-  approved: "border-tile/40 text-tile",
-  rejected: "border-danger/40 text-danger",
-};
+const TONE: Record<RatingStatus, ChipTone> = { pending: "lapis", approved: "tile", rejected: "danger" };
 
 function Items({ items }: { items: Item[] }) {
   return (
-    <ul className="mt-4 divide-y divide-line rounded-xl border border-line bg-paper">
+    <ul className="mt-4 divide-y divide-line border-y border-line">
       {items.map((r) => (
-        <li key={r.id} className="flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:gap-6 sm:px-5">
+        <li key={r.id} className="flex flex-col gap-4 py-5 sm:flex-row sm:items-start sm:gap-6">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <Stars value={r.stars} tone="paper" label={T.form.star(r.stars)} className="text-lg" />
               <span className="text-sm text-muted">{T.admin.meta(r.name, formatDate(r.updatedAt))}</span>
-              {r.status !== "pending" && (
-                <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${CHIP[r.status]}`}>
-                  {T.admin.status[r.status]}
-                </span>
-              )}
+              {r.status !== "pending" && <Chip tone={TONE[r.status]}>{T.admin.status[r.status]}</Chip>}
             </div>
             <p className="mt-2 whitespace-pre-line break-words leading-relaxed">{r.body}</p>
             <p className="mt-2 text-sm">

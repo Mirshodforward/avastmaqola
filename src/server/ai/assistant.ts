@@ -65,12 +65,13 @@ async function reserve(userId: string, articleId: number) {
   return db.transaction(async (tx) => {
     // Bir akkauntning parallel so‘rovlari navbatma-navbat: hammasi "limit tugamagan" deb o‘tib ketmasin
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`ai:${userId}`}, 0))`);
+    // Soni va "band" — faqat yordamchi so‘rovlari; narx chegarasi umumiy (internetdagi izlash ham kiradi)
     const [used] = await tx
       .select({
-        count: sql<number>`(count(*) filter (where ${aiRequests.createdAt} >= ${today}))::int`,
+        count: sql<number>`(count(*) filter (where ${aiRequests.kind} = 'assistant' and ${aiRequests.createdAt} >= ${today}))::int`,
         cost: sql<number>`(coalesce(sum(${aiRequests.costMicroUsd}) filter (where ${aiRequests.createdAt} >= ${today}), 0))::int`,
         // Server o‘chib qolsa "running" qator abadiy bloklamasin (so‘rov maxDurationMs’dan uzoq davom etmaydi)
-        running: sql<number>`(count(*) filter (where ${aiRequests.status} = 'running' and ${aiRequests.createdAt} > now() - interval '5 minutes'))::int`,
+        running: sql<number>`(count(*) filter (where ${aiRequests.kind} = 'assistant' and ${aiRequests.status} = 'running' and ${aiRequests.createdAt} > now() - interval '5 minutes'))::int`,
       })
       .from(aiRequests)
       .where(and(eq(aiRequests.userId, userId), gt(aiRequests.createdAt, sql`now() - interval '2 days'`)));

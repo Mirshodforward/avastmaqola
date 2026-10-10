@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Field } from "@/components/auth/field";
 import { TextAreaField } from "@/components/profile/controls";
 import type { AiDraft, AiProposal } from "@/lib/ai";
@@ -16,7 +16,7 @@ import {
   type Problem,
   type VenueType,
 } from "@/lib/article-rules";
-import type { ApiError } from "@/lib/auth-types";
+import type { ApiError, ApiResult } from "@/lib/auth-types";
 import { formatBytes } from "@/lib/format";
 import { LANGS, LANG_LABELS, LANG_SUFFIX, type Lang } from "@/lib/langs";
 import type { ArticleView as View } from "@/server/articles/view";
@@ -46,6 +46,14 @@ type Errors = Partial<Record<string, string>>;
 /** Muallif qatori barqaror kalit bilan: tartib o‘zgarganda fokus o‘sha muallif bilan birga ko‘chadi */
 type Row = AuthorInput & { uid: number };
 
+/** Oxirgi o‘zgarishdan shuncha vaqt o‘tgach qoralama o‘zi saqlanadi */
+const AUTOSAVE_MS = 2500;
+/** Havola bosilganda saqlash shuncha kutiladi; ulanish osilib qolsa — chiqish-chiqmaslikni o‘qituvchi hal qiladi */
+const LEAVE_WAIT_MS = 8000;
+const NETWORK_ERROR: ApiError = { code: "network", message: "Server bilan aloqa yo‘q." };
+
+/** Avtosaqlash o‘tmadi: qaysi matn (json) saqlanmadi va o‘qituvchi nima qila oladi */
+type SaveFailure = { json: string; message: string; field?: string; retry: boolean };
 
 const langOf = (field: string) => LANGS.find((l) => field.split(".")[0].endsWith(LANG_SUFFIX[l]));
 
@@ -84,6 +92,20 @@ type AiSnapshot = {
   rows: { before: Row[]; applied: Row[] } | null;
 };
 
+/** Hali hech narsa yozilmagan hammuallif qatori */
+const blank = (r: AuthorInput) => !r.isMe && ![r.givenName, r.familyName, r.institution, r.orcid].some((v) => v.trim());
+
+/**
+ * Saqlanadigan (va ko‘rinishga chiqadigan) mualliflar: oxiridagi bo‘sh hammuallif qatorlari tashlab ketiladi — ularda
+ * yo‘qoladigan narsa yo‘q, avtosaqlash esa endigina qo‘shilgan qatorga «Familiyani kiriting» deb chiqmaydi. Qolganlarining
+ * tartib raqami o‘zgarmaydi: server xatosi ("authors.1.givenName") aynan o‘sha qatorga tushadi
+ */
+function keptRows(rows: Row[]) {
+  let end = rows.length;
+  while (end > 0 && blank(rows[end - 1])) end--;
+  return rows.slice(0, end);
+}
+
 function payload(values: EditorValues, rows: Row[]) {
   return {
     ...values,
@@ -98,6 +120,35 @@ function payload(values: EditorValues, rows: Row[]) {
       isMe: r.isMe,
     })),
   };
+}
+
+/** Server maydon xatolari forma nomlari bilan: "keywordsRu.2" → keywordsRu; mualliflar maydoni qator bilan qoladi */
+function fieldErrorsOf(error: ApiError): Errors {
+  const raw = error.fieldErrors ?? (error.field ? { [error.field]: error.message } : {});
+  const next: Errors = {};
+  for (const [k, msg] of Object.entries(raw)) next[k.startsWith("authors.") ? k : k.split(".")[0]] ??= msg;
+  return next;
+}
+
+/** Qoralamani saqlash. keepalive: sahifa yopilayotganda boshlangan so‘rov ham oxiriga yetadi */
+async function patchDraft(id: number, json: string): Promise<ApiResult<object>> {
+  try {
+    const res = await fetch(`/api/articles/${id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: json,
+      keepalive: true,
+      cache: "no-store",
+    });
+    const body: unknown = await res.json();
+    // Kutilmagan javob (proksi yoki WAF sahifasi) tarmoq xatosi kabi: aks holda avtosaqlash to‘xtamay takrorlanadi
+    if (!body || typeof body !== "object" || !("ok" in body) || (!body.ok && !("error" in body))) {
+      return { ok: false, error: NETWORK_ERROR };
+    }
+    return body as ApiResult<object>;
+  } catch {
+    return { ok: false, error: NETWORK_ERROR };
+  }
 }
 
 export function ArticleEditor({
@@ -134,10 +185,10 @@ export function ArticleEditor({
   const [pdfBytes, setPdfBytes] = useState(initialPdfBytes);
   const [tab, setTab] = useState<Lang>(initial.lang || "uz");
   const [errors, setErrors] = useState<Errors>({});
-  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
-  const [busy, setBusy] = useState<"save" | "submit" | "delete" | null>(null);
+  // Yuborish yoki o‘chirish o‘tmaganda (avtosaqlash holati alohida ko‘rsatiladi)
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState<"submit" | "delete" | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [dirty, setDirty] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   // Oxirgi PDF yuklangan paytdagi oxirgi xabar raqami: undan oldingi "to‘ldirish" so‘rovi eski PDF’niki
@@ -145,9 +196,35 @@ export function ArticleEditor({
   const aiDialog = useRef<HTMLDialogElement>(null);
   const aiFocus = useRef<"input" | "close">("input");
   const aiButton = useRef<HTMLButtonElement>(null);
+  const statusRef = useRef<HTMLParagraphElement>(null);
   const aiSnapshots = useRef(new Map<number, AiSnapshot>());
   // PDF almashtirilayotganda yuborilsa, admin eski PDF’ni ko‘rardi — yuklash ham umumiy qulfga kiradi
   const blocked = busy !== null || uploading;
+
+  const kept = keptRows(rows);
+  const body = payload(values, kept);
+
+  // Avtosaqlash. json — serverga yuboriladigan matn; saqlangani bilan farq qilsa, saqlanmagan o‘zgarish bor.
+  // Saqlash formani qulflamaydi (o‘qituvchi yozishda davom etadi, AI javobi ham formaga tushaveradi): so‘rov ketgan
+  // paytdagi nusxa saqlangan deb belgilanadi, shu orada yozilgani navbatdagi saqlashga qoladi
+  const json = JSON.stringify(body);
+  const [saved, setSaved] = useState(json);
+  const [saving, setSaving] = useState(false);
+  const [failure, setFailure] = useState<SaveFailure | null>(null);
+  const latest = useRef(json);
+  const savedRef = useRef(json);
+  const flight = useRef<Promise<SaveFailure | null> | null>(null);
+  // Havola bosilgach saqlash kutilmoqda / o‘qituvchi chiqishni tanladi (himoya shu bosishni o‘tkazib yuboradi)
+  const waiting = useRef(false);
+  const leaving = useRef(false);
+  // Maqola yuborildi yoki o‘chirildi: endi saqlanadigan narsa yo‘q
+  const closed = useRef(false);
+  useEffect(() => {
+    latest.current = json;
+  });
+  const pending = json !== saved;
+  // Xato faqat aynan saqlanmagan o‘sha matnga tegishli: o‘qituvchi tuzatsa yoki qaytarib qo‘ysa, xato yo‘qoladi
+  const failed = failure && failure.json === json ? failure : null;
 
   const assistant = useAssistant(id, {
     draft: (): AiDraft => ({
@@ -179,42 +256,78 @@ export function ArticleEditor({
     const d = aiDialog.current;
     if (aiOpen && !d?.open) {
       d?.showModal();
-      // Birinchi tugma («Yangi suhbat») emas: xabar maydoni, PDF kartasidan ochilganda esa ✕ fokuslansin
+      // Birinchi tugma («Yangi suhbat») emas: xabar maydoni, PDF kartasidan ochilganda esa yopish tugmasi fokuslansin
       d?.querySelector<HTMLElement>(aiFocus.current === "close" ? '[aria-label="AI yordamchini yopish"]' : "textarea")?.focus();
     }
     if (!aiOpen && d?.open) d.close();
   }, [aiOpen]);
 
-  /** AI oynasi (telefon): bar tugmasidan — xabar maydoniga, PDF kartasidan — ✕ ga (klaviatura jarayonni yopmasin) */
+  /** AI oynasi (telefon): bar tugmasidan — xabar maydoniga, PDF kartasidan — yopish tugmasiga (klaviatura jarayonni yopmasin) */
   function openAi(focus: "input" | "close" = "input") {
     aiFocus.current = focus;
     setAiOpen(true);
   }
 
-  // Saqlanmagan matn bilan chiqishdan ogohlantirish: yopish/yangilash (beforeunload) va sayt ichidagi
-  // havolalar — Next Link sahifani almashtirganda beforeunload ishlamaydi
+  // Oxirgi o‘zgarishdan AUTOSAVE_MS o‘tgach saqlanadi. Yuborish, o‘chirish va PDF yuklash paytida kutadi; shu matn
+  // saqlanmay qolgan bo‘lsa (xato) — yangi o‘zgarishni yoki «qayta urinish»ni kutadi
+  const autosave = useEffectEvent(() => {
+    if (!closed.current) void saveOnce();
+  });
   useEffect(() => {
-    if (!dirty) return;
-    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
-    const onClick = (e: MouseEvent) => {
-      const link = e.target instanceof Element ? e.target.closest("a[href]") : null;
-      if (!(link instanceof HTMLAnchorElement) || link.target === "_blank" || link.origin !== location.origin) return;
-      if (link.pathname === location.pathname && link.search === location.search && link.hash) return; // sahifa ichidagi bo‘lim
-      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; // yangi oynada ochish
-      if (!window.confirm("Saqlanmagan o‘zgarishlar yo‘qoladi. Sahifadan chiqasizmi?")) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
+    if (!pending || saving || blocked || json === failure?.json) return;
+    const timer = setTimeout(() => autosave(), AUTOSAVE_MS);
+    return () => clearTimeout(timer);
+  }, [json, pending, saving, blocked, failure]);
+
+  // Boshqa oynaga o‘tganda yoki sahifa yopilayotganda kutmasdan saqlanadi. Next boshqa sahifaga o‘tganda muharrirni
+  // yashiradi (Activity) — effekt tozalanishi o‘sha payt ham saqlaydi
+  const flushNow = useEffectEvent(() => {
+    if (!closed.current) void flush();
+  });
+  useEffect(() => {
+    // Sahifaga qaytilganda (Activity) himoya yana ishlaydi
+    leaving.current = false;
+    waiting.current = false;
+    const onVisibility = () => document.visibilityState === "hidden" && flushNow();
+    const onPageHide = () => flushNow();
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", onPageHide);
+      flushNow();
     };
+  }, []);
+
+  // Himoya faqat saqlanmagan (yoki saqlanayotgan) matn bo‘lganda: sahifani yopish/yangilash (beforeunload) va sayt
+  // ichidagi havolalar — Next Link sahifani almashtirganda beforeunload ishlamaydi. Havola bosilsa, avval saqlab olinadi
+  const unsaved = () => flight.current !== null || latest.current !== savedRef.current;
+  const onBeforeUnload = useEffectEvent((e: BeforeUnloadEvent) => {
+    if (unsaved() && !leaving.current) e.preventDefault();
+  });
+  const onLinkClick = useEffectEvent((e: MouseEvent) => {
+    const link = e.target instanceof Element ? e.target.closest("a[href]") : null;
+    if (!(link instanceof HTMLAnchorElement) || link.target === "_blank" || link.origin !== location.origin) return;
+    if (link.pathname === location.pathname && link.search === location.search && link.hash) return; // sahifa ichidagi bo‘lim
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; // yangi oynada ochish
+    if (leaving.current || !unsaved()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (!waiting.current) void leave(link); // saqlash kutilayotganda qayta bosish e’tiborsiz
+  });
+  const guard = pending || saving;
+  useEffect(() => {
+    if (!guard) return;
+    const warn = (e: BeforeUnloadEvent) => onBeforeUnload(e);
+    const click = (e: MouseEvent) => onLinkClick(e);
     window.addEventListener("beforeunload", warn);
-    document.addEventListener("click", onClick, true);
+    document.addEventListener("click", click, true);
     return () => {
       window.removeEventListener("beforeunload", warn);
-      document.removeEventListener("click", onClick, true);
+      document.removeEventListener("click", click, true);
     };
-  }, [dirty]);
+  }, [guard]);
 
-  const body = payload(values, rows);
   const problems: Problem[] = [
     ...(hasProfile ? [] : [{ field: "profile", message: "Avval profilingizni to‘ldiring" }]),
     ...articleProblems({
@@ -255,7 +368,6 @@ export function ArticleEditor({
 
   function touch(keys: string[]) {
     setErrors((e) => Object.fromEntries(Object.entries(e).filter(([k]) => !keys.includes(k))));
-    setDirty(true);
     setNotice(null);
   }
 
@@ -273,7 +385,6 @@ export function ArticleEditor({
   function reorder(next: Row[]) {
     setRows(next);
     setErrors((e) => Object.fromEntries(Object.entries(e).filter(([k]) => !k.startsWith("authors"))));
-    setDirty(true);
     setNotice(null);
   }
 
@@ -331,8 +442,8 @@ export function ArticleEditor({
 
   /**
    * AI taklifini formaga qo‘llaydi. Bitta javob ichida taklif to‘ldirib boriladi: avvalgi qo‘llash bekor qilinib,
-   * butun taklif qayta qo‘llanadi. Saqlash/yuborish paytida va yakuniy ko‘rinish ochiq turganda forma o‘zgarmaydi —
-   * taklif keyin "Formaga qo‘llash" tugmasi bilan qo‘llanadi.
+   * butun taklif qayta qo‘llanadi. Yuborish/o‘chirish paytida va yakuniy ko‘rinish ochiq turganda forma o‘zgarmaydi —
+   * taklif keyin "Formaga qo‘llash" tugmasi bilan qo‘llanadi. Avtosaqlash bunga to‘sqinlik qilmaydi
    */
   function applyAi(messageId: number, p: AiProposal): boolean {
     if (blocked || previewOpen || Object.keys(p).length === 0) return false;
@@ -368,44 +479,94 @@ export function ArticleEditor({
     return true;
   }
 
+  /** Yuborish yoki o‘chirish o‘tmadi: xabar pastki panelda, xato maydon ostida, fokus birinchi xato maydonga */
   function showError(error: ApiError & { problems?: Problem[] }) {
     // Yuborishda server topgan kamchiliklar (klient bilan farq qilsa) xabarning o‘zida ko‘rinadi
-    setNotice({ ok: false, text: error.problems?.length ? error.problems.map((p) => p.message).join(" · ") : error.message });
-    // "keywordsRu.2" → keywordsRu; mualliflar maydoni esa qator bilan qoladi
-    const raw = error.fieldErrors ?? (error.field ? { [error.field]: error.message } : {});
-    const next: Errors = {};
-    for (const [k, msg] of Object.entries(raw)) next[k.startsWith("authors.") ? k : k.split(".")[0]] ??= msg;
+    setNotice(error.problems?.length ? error.problems.map((p) => p.message).join(" · ") : error.message);
+    const next = fieldErrorsOf(error);
     setErrors(next);
     const first = Object.keys(next)[0];
     if (first) focusField(first);
   }
 
-  async function persist() {
-    const res = await sendJson("PATCH", `/api/articles/${id}`, body);
-    if (res.ok) {
-      setDirty(false);
-      setErrors({});
-      return true;
+  /** Bitta saqlash so‘rovi. Bir vaqtda faqat bittasi: keyingisi oldingisini quvib o‘tib, eski matnni yozib qo‘ymasin */
+  function saveOnce(): Promise<SaveFailure | null> {
+    if (flight.current) return flight.current;
+    const snapshot = latest.current;
+    if (snapshot === savedRef.current) return Promise.resolve(null);
+    setSaving(true);
+    const request = patchDraft(id, snapshot).then((res): SaveFailure | null => {
+      flight.current = null;
+      setSaving(false);
+      if (res.ok) {
+        savedRef.current = snapshot;
+        setSaved(snapshot);
+        setFailure(null);
+        setErrors({});
+        return null;
+      }
+      const fields = fieldErrorsOf(res.error);
+      const field = Object.keys(fields)[0];
+      const next: SaveFailure = field
+        ? { json: snapshot, field, message: fields[field]!, retry: false }
+        : { json: snapshot, message: res.error.message, retry: true }; // maydonsiz xato (tarmoq, sessiya…) — qayta urinish mumkin
+      setFailure(next);
+      // Xato maydon ostida va holat qatorida ko‘rinadi; fokus joyida qoladi — o‘qituvchi yozishda davom etadi
+      if (field) setErrors(fields);
+      return next;
+    });
+    flight.current = request;
+    return request;
+  }
+
+  /** Saqlanmagan o‘zgarishlarni hozir saqlaydi (ko‘rinish, yuborish, chiqish oldidan). null — hammasi saqlandi */
+  async function flush(): Promise<SaveFailure | null> {
+    for (;;) {
+      if (flight.current) {
+        const result = await flight.current;
+        if (result && result.json === latest.current) return result; // aynan shu matn hozirgina saqlanmadi
+        continue;
+      }
+      if (latest.current === savedRef.current) return null;
+      const result = await saveOnce();
+      if (result) return result;
     }
-    showError(res.error);
-    return false;
   }
 
-  async function save() {
-    if (blocked) return;
-    setBusy("save");
-    if (await persist()) setNotice({ ok: true, text: "Saqlandi." });
-    setBusy(null);
+  /** Holat qatoridagi «qayta urinish»: tugma yo‘qoladi — fokus holat qatorida qoladi */
+  function retrySave() {
+    statusRef.current?.focus();
+    void flush();
   }
 
-  /** PDF darhol serverda saqlanadi: forma "saqlanmagan" bo‘lmaydi, eskirgan PDF kamchiliklari tozalanadi */
+  /** Saqlanmagan matn bilan havola bosildi: avval saqlanadi; o‘tmasa yoki osilib qolsa — o‘qituvchidan so‘raladi */
+  async function leave(link: HTMLAnchorElement) {
+    waiting.current = true;
+    const stalled = new Promise<"stalled">((resolve) => setTimeout(() => resolve("stalled"), LEAVE_WAIT_MS));
+    let result: Awaited<ReturnType<typeof flush>> | "stalled";
+    try {
+      result = await Promise.race([flush(), stalled]);
+    } finally {
+      // Kutilmagan xatoda ham bayroq tushadi: aks holda keyingi har bir havola bosilishi bloklanib qoladi
+      waiting.current = false;
+    }
+    if (result !== null && !window.confirm("Saqlanmagan o‘zgarishlar yo‘qoladi. Sahifadan chiqasizmi?")) return;
+    // Himoya shu bosishni o‘tkazib yuboradi, Link o‘zi o‘tadi (click sinxron — bayroq darhol tushiriladi)
+    leaving.current = true;
+    if (link.isConnected) {
+      link.click();
+      leaving.current = false;
+    } else location.assign(link.href);
+  }
+
+  /** PDF darhol serverda saqlanadi: eskirgan PDF kamchiliklari tozalanadi */
   function onUploaded(bytes: number) {
     setPdfBytes(bytes);
     setErrors((e) => Object.fromEntries(Object.entries(e).filter(([k]) => k !== "pdf")));
     setUploadMark(lastMessageId.current);
   }
 
-  /** AI panelidagi "PDF faylni yuklash": karta ko‘rinadi, fokus PDF tugmasida, fayl tanlash oynasi shu bosishning o‘zida ochiladi */
+  /** AI oynasidagi "PDF faylni yuklash" (telefon): fokus PDF tugmasida, fayl tanlash oynasi shu bosishning o‘zida ochiladi */
   function pickPdf() {
     aiDialog.current?.close(); // yopilish fokusni ochgan tugmaga qaytaradi — undan keyin PDF tugmasiga o‘tkazamiz
     const button = document.querySelector<HTMLButtonElement>('button[name="pdf"]');
@@ -419,7 +580,7 @@ export function ArticleEditor({
     if (aiStep === "done") return startReview();
     if (aiStep === "pending") return assistant.toggle(fill!.id); // bepul: tayyor javob formaga qo‘llanadi
     void assistant.send(ACTIONS.fill.text);
-    // Telefonda jarayon AI oynasida ko‘rinadi; fokus ✕ da — ekran klaviaturasi oqimni yopmasin
+    // Telefonda jarayon AI oynasida ko‘rinadi; fokus yopish tugmasida — ekran klaviaturasi oqimni yopmasin
     if (!matchMedia("(min-width: 64rem)").matches) openAi("close");
   }
 
@@ -430,30 +591,35 @@ export function ArticleEditor({
     s?.focus({ preventScroll: true });
   }
 
-  /** Yuborishdan oldin o‘qituvchi sahifaning yakuniy ko‘rinishini ko‘radi va tasdiqlaydi */
+  /** Yuborishdan oldin o‘qituvchi sahifaning yakuniy ko‘rinishini ko‘radi va tasdiqlaydi. Shu payt qoralama ham saqlanadi */
   function openPreview() {
     if (blocked) return;
     setNotice(null);
     setAiOpen(false);
     setPreviewOpen(true);
+    void flush();
   }
 
   async function submit() {
     if (blocked) return;
     setNotice(null);
     if (problems.length) {
-      setNotice({ ok: false, text: "Yuborishdan oldin kamchiliklarni tuzating." });
+      setNotice("Yuborishdan oldin kamchiliklarni tuzating.");
       focusField(problems[0].field);
       return;
     }
     setBusy("submit");
-    if (dirty && !(await persist())) {
+    // Server bazadagi nusxani tekshiradi: avval oxirgi o‘zgarishlar saqlanadi
+    const failure = await flush();
+    if (failure) {
       setPreviewOpen(false);
       setBusy(null);
+      if (failure.field) focusField(failure.field);
       return;
     }
     const res = await sendJson("POST", `/api/articles/${id}/submit`);
     if (res.ok) {
+      closed.current = true;
       router.refresh(); // sahifa "Ko‘rib chiqilmoqda" ko‘rinishiga o‘tadi
       return;
     }
@@ -490,7 +656,7 @@ export function ArticleEditor({
     publishedAt: null,
     updatedAt: new Date(preview.updatedAt),
     reviewNote: null,
-    authors: rows.map((r) => ({
+    authors: kept.map((r) => ({
       givenName: r.givenName.trim(),
       familyName: r.familyName.trim(),
       institution: r.institution.trim() || null,
@@ -504,9 +670,10 @@ export function ArticleEditor({
   async function remove() {
     if (blocked || !window.confirm("Maqola o‘chirilsinmi? Buni qaytarib bo‘lmaydi.")) return;
     setBusy("delete");
+    await flight.current; // yo‘ldagi saqlash o‘chirishdan keyin yetib kelmasin
     const res = await sendJson("DELETE", `/api/articles/${id}`);
     if (res.ok) {
-      setDirty(false);
+      closed.current = true;
       router.push("/dashboard");
       return;
     }
@@ -521,21 +688,14 @@ export function ArticleEditor({
     onChange: (e: { target: { value: string } }) => update(key, e.target.value),
   });
 
-  // To‘ldirish tartibi: har bosqichda nechta narsa qolgani (yuborish tekshiruvi bilan bir xil qoidalar)
+  // Har bosqichda nechta narsa qolgani (yuborish tekshiruvi bilan bir xil qoidalar). Hozirgi qadam — birinchi chala bosqich
   const left = (n: number) => problems.filter((p) => stepOf(p.field) === n).length;
-  // Maqola fayli birinchi; qolgani professional maqola tartibida: sarlavha → mualliflar → annotatsiya
-  const steps: StepInfo[] = [
-    { n: 1, href: "#step-1", title: "Maqola matni (PDF)", left: left(1) },
-    { n: 2, href: "#step-2", title: "Sarlavha", left: left(2) },
-    { n: 3, href: "#step-3", title: "Mualliflar va tashkilotlar", left: left(3) },
-    { n: 4, href: "#step-4", title: "Annotatsiya va kalit so‘zlar", left: left(4) },
-  ];
-  // Hozirgi qadam — birinchi chala bosqich (kabinetdagi yo‘l xaritasi kabi)
-  const next = steps.find((s) => s.left > 0);
-  const step = (n: number) => {
-    const s = steps[n - 1];
-    const state: StepState = s.left === 0 ? "done" : s === next ? "current" : "todo";
-    return { n, title: s.title, left: s.left, state };
+  const current = [1, 2, 3, 4].find((n) => left(n) > 0);
+  const step = (n: number, title: string) => {
+    const l = left(n);
+    // Rad etilgan maqolada «Tayyor» belgilari universitet izohiga zid chiqmasin — faqat qolgan ishlar ko‘rinadi
+    const state: StepState = l > 0 ? (n === current ? "current" : "todo") : reviewNote ? "todo" : "done";
+    return { n, title, left: l, state };
   };
 
   return (
@@ -546,235 +706,216 @@ export function ArticleEditor({
           aria-label="AI yordamchi"
           className="hidden overflow-hidden rounded-xl border border-line bg-paper lg:sticky lg:top-4 lg:flex lg:h-[calc(100svh-7.5rem)] lg:flex-col"
         >
-          {/* PDF almashtirilayotganda server hali eski faylni o‘qiydi — "PDF asosida to‘ldirish" taklif qilinmaydi */}
+          {/* PDF almashtirilayotganda server hali eski faylni o‘qiydi — "PDF asosida to‘ldirish" taklif qilinmaydi.
+              PDF kartasida to‘ldirish taklifi turganda panel uni takrorlamaydi */}
           <AiPanel
             assistant={assistant}
             hasPdf={pdfBytes !== null && !uploading}
             hasContent={hasContent}
-            onPreview={openPreview}
+            fillOffered={aiStep !== null}
             onFocusField={focusField}
-            onPickPdf={pickPdf}
           />
         </aside>
       )}
 
-      <div className="min-w-0 space-y-6 xl:space-y-8">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>{header}</div>
-          <div className="flex flex-wrap gap-2">
-            {canDelete && (
-              <button type="button" className="btn btn-ghost text-danger" aria-disabled={blocked} onClick={remove}>
-                Maqolani o‘chirish
-              </button>
-            )}
-            {/* Istalgan paytda: maqola sahifasi hozirgi (saqlanmagan) holatda qanday ko‘rinadi */}
-            <button type="button" className="btn btn-secondary" aria-haspopup="dialog" aria-disabled={blocked} onClick={openPreview}>
-              Ko‘rinishni ko‘rish
-            </button>
-          </div>
-        </div>
+      <div className="min-w-0 space-y-6">
+        <div>{header}</div>
 
         {reviewNote && (
           <div className="rounded-xl border border-danger/40 bg-danger-soft p-5">
-            <p className="font-medium text-danger">Universitet izohi</p>
+            <p className="font-medium text-danger">Universitet izohi — tuzatib, qayta yuboring</p>
             <p className="mt-1 whitespace-pre-line">{reviewNote}</p>
-            <p className="mt-2 text-sm text-muted">Tuzatib, maqolani qayta yuboring.</p>
           </div>
         )}
 
-        {/* Saqlash/yuborish paytida forma qulflanadi: shu orada yozilgan matn "saqlandi" deb belgilanmasin.
-            PDF ham: admin eski faylni ko‘rmasin. m-0 yo‘q: u ustundagi oraliqni o‘chirib, oxirgi bosqichni pastdagi yopishqoq panelga yopishtirardi */}
-        <fieldset disabled={busy !== null} className="min-w-0 space-y-6 border-0 p-0 xl:space-y-8">
-          <Step
-            {...step(1)}
-            description={`Maqolaning to‘liq matni, 10 MB gacha.${ai ? " Yuklasangiz, AI yordamchi undan barcha maydonlarni to‘ldirib bera oladi." : ""}`}
-          >
-            <PdfField
-              id={id}
-              bytes={pdfBytes}
-              error={errors.pdf}
-              uploading={uploading}
-              locked={assistant.busy && pdfBytes !== null}
-              onUploading={setUploading}
-              onUploaded={onUploaded}
-            />
-            {aiStep && (
-              <AiFill
-                state={aiStep}
-                primary={problems.length > 0 && (aiStep !== "offer" || !hasContent)}
-                disabled={aiStep === "working" || (aiStep === "offer" && (assistant.busy || assistant.remaining === 0))}
-                replaces={hasContent}
-                fields={proposal ? fieldsOf(proposal.value).length : 0}
-                error={fillError}
-                noneLeft={assistant.remaining === 0}
-                onMain={onAiStep}
-                onStop={assistant.stop}
+        {/* Bitta forma yuzasi: bosqichlar chiziq bilan ajraladi (ichma-ich kartalar yo‘q) */}
+        <div className="rounded-xl border border-line bg-paper px-5 sm:px-8">
+          {/* Yuborish/o‘chirish paytida forma qulflanadi. PDF ham: admin eski faylni ko‘rmasin */}
+          <fieldset disabled={busy !== null} className="min-w-0 divide-y divide-line">
+            <Step {...step(1, "Maqola matni (PDF)")} description="Maqolaning to‘liq matni, 10 MB gacha.">
+              <PdfField
+                id={id}
+                bytes={pdfBytes}
+                error={errors.pdf}
+                uploading={uploading}
+                locked={assistant.busy && pdfBytes !== null}
+                onUploading={setUploading}
+                onUploaded={onUploaded}
               />
-            )}
-          </Step>
+              {aiStep && (
+                <AiFill
+                  state={aiStep}
+                  primary={problems.length > 0 && (aiStep !== "offer" || !hasContent)}
+                  disabled={aiStep === "working" || (aiStep === "offer" && (assistant.busy || assistant.remaining === 0))}
+                  replaces={hasContent}
+                  fields={proposal ? fieldsOf(proposal.value).length : 0}
+                  error={fillError}
+                  noneLeft={assistant.remaining === 0}
+                  onMain={onAiStep}
+                  onStop={assistant.stop}
+                />
+              )}
+            </Step>
 
-          <StepNav steps={steps} />
+            <Step {...step(2, "Sarlavha")} count focusable>
+              <fieldset>
+                <legend className="text-sm font-medium">Maqola (PDF) qaysi tilda yozilgan? *</legend>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {LANGS.map((l) => (
+                    <label key={l} className={CHOICE}>
+                      <input
+                        type="radio"
+                        name="lang"
+                        value={l}
+                        checked={values.lang === l}
+                        onChange={() => update("lang", l)}
+                        aria-describedby="lang-message"
+                        className="size-4 accent-[var(--lapis)]"
+                      />
+                      <span lang={l}>{LANG_LABELS[l]}</span>
+                    </label>
+                  ))}
+                </div>
+                <p id="lang-message" className={`mt-1.5 text-sm ${errors.lang ? "text-danger" : "text-muted"}`}>
+                  {errors.lang ?? "Asosiy tildagi sarlavha PDF’dagi bilan bir xil bo‘lsin."}
+                </p>
+              </fieldset>
 
-          <Step
-            {...step(2)}
-            chip
-            focusable
-            description="Maqola qaysi tilda yozilgani va sarlavhasi — uch tilda. Asosiy tildagi sarlavha PDF’dagi bilan bir xil bo‘lsin."
-          >
-            <fieldset className="sm:col-span-2">
-              <legend className="text-sm font-medium">Maqola (PDF) qaysi tilda yozilgan? *</legend>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {LANGS.map((l) => (
-                  <label key={l} className={CHOICE}>
-                    <input
-                      type="radio"
-                      name="lang"
-                      value={l}
-                      checked={values.lang === l}
-                      onChange={() => update("lang", l)}
-                      aria-describedby="lang-message"
-                      className="size-4 accent-[var(--lapis)]"
-                    />
-                    <span lang={l}>{LANG_LABELS[l]}</span>
-                  </label>
+              {LANGS.map((l) => (
+                <TextAreaField
+                  key={l}
+                  label={`Sarlavha (${LANG_LABELS[l]})${values.lang === l ? " · asosiy" : ""} *`}
+                  lang={l}
+                  rows={2}
+                  maxLength={L.titleMax}
+                  className="input mt-1.5 min-h-0"
+                  {...text(`title${LANG_SUFFIX[l]}`)}
+                />
+              ))}
+            </Step>
+
+            <Step {...step(3, "Mualliflar va tashkilotlar")} count description="Maqoladagi tartibda.">
+              <div className="divide-y divide-line">
+                {rows.map((a, i) => (
+                  <div key={a.uid} className="py-5 first:pt-0 last:pb-0">
+                    <fieldset data-row={a.uid} className="min-w-0">
+                      <legend className="text-sm font-medium">
+                        {i + 1}-muallif{a.isMe ? " (siz)" : ""}
+                      </legend>
+                      <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                        <Field
+                          label="Familiya *"
+                          name={`authors.${i}.familyName`}
+                          value={a.familyName}
+                          error={errors[`authors.${i}.familyName`]}
+                          onChange={(e) => updateRow(i, { familyName: e.target.value })}
+                        />
+                        <Field
+                          label="Ism *"
+                          name={`authors.${i}.givenName`}
+                          value={a.givenName}
+                          error={errors[`authors.${i}.givenName`]}
+                          onChange={(e) => updateRow(i, { givenName: e.target.value })}
+                        />
+                        <Field
+                          label="Muassasa"
+                          name={`authors.${i}.institution`}
+                          value={a.institution}
+                          error={errors[`authors.${i}.institution`]}
+                          onChange={(e) => updateRow(i, { institution: e.target.value })}
+                        />
+                        <Field
+                          label="ORCID iD"
+                          name={`authors.${i}.orcid`}
+                          placeholder="0000-0000-0000-0000"
+                          spellCheck={false}
+                          value={a.orcid}
+                          error={errors[`authors.${i}.orcid`]}
+                          onChange={(e) => updateRow(i, { orcid: e.target.value })}
+                        />
+                      </div>
+                      {/* Yagona muallifda tartib tugmalari kerak emas (ikkalasi ham o‘chiq turardi) */}
+                      {rows.length > 1 && (
+                        <div className="mt-3 flex flex-wrap gap-1 text-sm">
+                          <button type="button" data-action="up" className="btn btn-ghost" disabled={i === 0} onClick={() => move(i, -1)}>
+                            Yuqoriga
+                          </button>
+                          <button
+                            type="button"
+                            data-action="down"
+                            className="btn btn-ghost"
+                            disabled={i === rows.length - 1}
+                            onClick={() => move(i, 1)}
+                          >
+                            Pastga
+                          </button>
+                          {!a.isMe && (
+                            <button type="button" className="btn btn-ghost text-danger" onClick={() => removeRow(i)}>
+                              Olib tashlash
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </fieldset>
+                  </div>
                 ))}
               </div>
-              <p id="lang-message" className={`mt-1.5 text-sm ${errors.lang ? "text-danger" : "text-muted"}`}>
-                {errors.lang ?? "Shu tildagi sarlavha sahifaning asosiy sarlavhasi bo‘ladi."}
-              </p>
-            </fieldset>
-
-            {LANGS.map((l) => (
-              <TextAreaField
-                key={l}
-                label={`Sarlavha (${LANG_LABELS[l]})${values.lang === l ? " · asosiy" : ""} *`}
-                lang={l}
-                rows={2}
-                maxLength={L.titleMax}
-                className="input mt-1.5 min-h-0"
-                {...text(`title${LANG_SUFFIX[l]}`)}
-              />
-            ))}
-          </Step>
-
-          <Step {...step(3)} chip description="Maqoladagi tartibda: har bir muallif va u ishlaydigan tashkilot.">
-            <div className="space-y-4 sm:col-span-2">
-              {rows.map((a, i) => (
-                <fieldset key={a.uid} data-row={a.uid} className="rounded-lg border border-line p-4">
-                  <legend className="px-1 text-sm font-medium">
-                    {i + 1}-muallif{a.isMe ? " (siz)" : ""}
-                  </legend>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <Field
-                      label="Familiya *"
-                      name={`authors.${i}.familyName`}
-                      value={a.familyName}
-                      error={errors[`authors.${i}.familyName`]}
-                      onChange={(e) => updateRow(i, { familyName: e.target.value })}
-                    />
-                    <Field
-                      label="Ism *"
-                      name={`authors.${i}.givenName`}
-                      value={a.givenName}
-                      error={errors[`authors.${i}.givenName`]}
-                      onChange={(e) => updateRow(i, { givenName: e.target.value })}
-                    />
-                    <Field
-                      label="Muassasa"
-                      name={`authors.${i}.institution`}
-                      value={a.institution}
-                      error={errors[`authors.${i}.institution`]}
-                      onChange={(e) => updateRow(i, { institution: e.target.value })}
-                    />
-                    <Field
-                      label="ORCID iD"
-                      name={`authors.${i}.orcid`}
-                      placeholder="0000-0000-0000-0000"
-                      spellCheck={false}
-                      value={a.orcid}
-                      error={errors[`authors.${i}.orcid`]}
-                      onChange={(e) => updateRow(i, { orcid: e.target.value })}
-                    />
-                  </div>
-                  {/* Yagona muallifda tartib tugmalari kerak emas (ikkalasi ham o‘chiq turardi) */}
-                  {rows.length > 1 && (
-                    <div className="mt-3 flex flex-wrap gap-1 text-sm">
-                      <button type="button" data-action="up" className="btn btn-ghost" disabled={i === 0} onClick={() => move(i, -1)}>
-                        ↑ Yuqoriga
-                      </button>
-                      <button
-                        type="button"
-                        data-action="down"
-                        className="btn btn-ghost"
-                        disabled={i === rows.length - 1}
-                        onClick={() => move(i, 1)}
-                      >
-                        ↓ Pastga
-                      </button>
-                      {!a.isMe && (
-                        <button type="button" className="btn btn-ghost text-danger" onClick={() => removeRow(i)}>
-                          Olib tashlash
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </fieldset>
-              ))}
               {errors.authors && <p className="text-sm text-danger">{errors.authors}</p>}
               {rows.length < L.authorsMax && (
                 <button type="button" className="btn btn-secondary" onClick={addRow}>
-                  + Hammuallif qo‘shish
+                  Hammuallif qo‘shish
                 </button>
               )}
+            </Step>
+
+            <Step {...step(4, "Annotatsiya va kalit so‘zlar")} count description="Maqolaning o‘zini tarjima qilish shart emas.">
+              <LangTabs tab={tab} onChange={setTab} main={values.lang} problems={problems.filter((p) => /^(abstract|keywords)/.test(p.field))} />
+              {LANGS.map((l) => {
+                const s = LANG_SUFFIX[l];
+                const main = values.lang && values.lang !== l ? values.lang : null;
+                return (
+                  <div key={l} role="tabpanel" id={`panel-${l}`} aria-labelledby={`tab-${l}`} hidden={tab !== l} className="space-y-5">
+                    {main && (
+                      <details open className="rounded-lg bg-mist px-4 py-3 text-sm">
+                        <summary className="cursor-pointer font-medium">Asosiy tildagi annotatsiya ({LANG_LABELS[main]})</summary>
+                        <p lang={main} className="mt-2 whitespace-pre-line text-muted">
+                          {values[`abstract${LANG_SUFFIX[main]}`] || "—"}
+                        </p>
+                      </details>
+                    )}
+                    <TextAreaField
+                      label={`Annotatsiya (${LANG_LABELS[l]}) *`}
+                      lang={l}
+                      rows={9}
+                      maxLength={L.abstractMax}
+                      hint={`${values[`abstract${s}`].trim().length}/${L.abstractMax} belgi, kamida ${L.abstractMin}.`}
+                      {...text(`abstract${s}`)}
+                    />
+                    <Field
+                      label={`Kalit so‘zlar (${LANG_LABELS[l]}) *`}
+                      lang={l}
+                      hint={`Vergul bilan ajrating: ${L.keywordsMin}–${L.keywordsMax} ta. Hozir: ${splitKeywords(values[`keywords${s}`]).length}.`}
+                      {...text(`keywords${s}`)}
+                    />
+                  </div>
+                );
+              })}
+            </Step>
+          </fieldset>
+
+          {/* Qaytarib bo‘lmaydigan amal formaning oxirida, tasdiqlash bilan */}
+          {canDelete && (
+            <div className="border-t border-line py-4">
+              <button type="button" className="btn btn-ghost -ml-4 text-danger" aria-disabled={blocked} onClick={remove}>
+                Maqolani o‘chirish
+              </button>
             </div>
-          </Step>
+          )}
+        </div>
 
-          <Step
-            {...step(4)}
-            chip
-            description="Uch tilda: o‘zbek, rus va ingliz. Maqolaning o‘zi bitta PDF — tarjima faqat shu qismlar uchun kerak."
-          >
-            <LangTabs tab={tab} onChange={setTab} main={values.lang} problems={problems.filter((p) => /^(abstract|keywords)/.test(p.field))} />
-            {LANGS.map((l) => {
-              const s = LANG_SUFFIX[l];
-              const main = values.lang && values.lang !== l ? values.lang : null;
-              return (
-                <div key={l} role="tabpanel" id={`panel-${l}`} aria-labelledby={`tab-${l}`} hidden={tab !== l} className="mt-5 space-y-5">
-                  {main && (
-                    <details open className="rounded-lg bg-mist p-4 text-sm">
-                      <summary className="cursor-pointer font-medium">Asosiy tildagi annotatsiya ({LANG_LABELS[main]})</summary>
-                      <p lang={main} className="mt-2 whitespace-pre-line text-muted">
-                        {values[`abstract${LANG_SUFFIX[main]}`] || "—"}
-                      </p>
-                    </details>
-                  )}
-                  <TextAreaField
-                    label={`Annotatsiya (${LANG_LABELS[l]}) *`}
-                    lang={l}
-                    rows={9}
-                    maxLength={L.abstractMax}
-                    hint={`${values[`abstract${s}`].trim().length}/${L.abstractMax} belgi, kamida ${L.abstractMin}.`}
-                    {...text(`abstract${s}`)}
-                  />
-                  <Field
-                    label={`Kalit so‘zlar (${LANG_LABELS[l]}) *`}
-                    lang={l}
-                    hint={`Vergul bilan ajrating: ${L.keywordsMin}–${L.keywordsMax} ta. Hozir: ${splitKeywords(values[`keywords${s}`]).length}.`}
-                    {...text(`keywords${s}`)}
-                  />
-                </div>
-              );
-            })}
-          </Step>
-
-        </fieldset>
-
-        <div className="sticky bottom-0 -mx-4 flex flex-wrap items-center gap-3 border-t border-line bg-mist/95 px-4 py-4 backdrop-blur sm:mx-0 sm:rounded-xl sm:border sm:bg-paper/95">
-          {/* disabled emas, aria-disabled: bosilgan tugma o‘chib qolsa klaviatura fokusi yo‘qoladi */}
-          <button type="button" className="btn btn-secondary" aria-disabled={blocked} onClick={save}>
-            {busy === "save" ? "Saqlanmoqda…" : "Saqlash"}
-          </button>
-          {/* Ko‘k (asosiy) rang — maqola yuborishga tayyor bo‘lganda; ungacha 1-bosqichdagi yuklash asosiy harakat */}
+        <div className="sticky bottom-0 -mx-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line bg-mist/95 px-4 py-4 backdrop-blur sm:mx-0 sm:rounded-xl sm:border sm:bg-paper/95">
+          {/* disabled emas, aria-disabled: bosilgan tugma o‘chib qolsa klaviatura fokusi yo‘qoladi.
+              Ko‘k (asosiy) rang — maqola yuborishga tayyor bo‘lganda; ungacha 1-bosqichdagi yuklash asosiy harakat */}
           <button
             type="button"
             className={`btn ${problems.length ? "btn-secondary" : "btn-primary"}`}
@@ -799,10 +940,14 @@ export function ArticleEditor({
               {assistant.busy && <span className="text-xs text-muted">yozmoqda…</span>}
             </button>
           )}
-          <p role="status" className={`text-sm ${notice?.ok ? "font-medium text-tile" : "text-danger"}`}>
-            {notice?.text}
+          {/* Avtosaqlash holati (yoki yuborish/o‘chirish xatosi). tabIndex: «qayta urinish» yo‘qolganda fokus shu yerda qoladi */}
+          <p ref={statusRef} tabIndex={-1} role="status" className="text-sm text-muted outline-none">
+            {notice ? (
+              <span className="text-danger">{notice}</span>
+            ) : (
+              <SaveState saving={saving} pending={pending} failed={failed} onRetry={retrySave} onFix={focusField} />
+            )}
           </p>
-          {dirty && !notice && <p className="text-sm text-muted">Saqlanmagan o‘zgarishlar bor.</p>}
         </div>
       </div>
 
@@ -824,7 +969,6 @@ export function ArticleEditor({
               assistant={assistant}
               hasPdf={pdfBytes !== null && !uploading}
               hasContent={hasContent}
-              onPreview={openPreview}
               onFocusField={focusField}
               onPickPdf={pickPdf}
               onClose={() => setAiOpen(false)}
@@ -852,6 +996,42 @@ export function ArticleEditor({
   );
 }
 
+/** Avtosaqlash holati: bir so‘z; o‘tmasa — sababi va bitta amal (qayta urinish yoki xato maydonga o‘tish) */
+function SaveState({
+  saving,
+  pending,
+  failed,
+  onRetry,
+  onFix,
+}: {
+  saving: boolean;
+  pending: boolean;
+  failed: SaveFailure | null;
+  onRetry: () => void;
+  onFix: (field: string) => void;
+}) {
+  if (saving || (pending && !failed)) return "Saqlanmoqda…";
+  if (!failed) return "Saqlandi";
+  const field = failed.field;
+  const action = "py-1 font-medium underline underline-offset-2";
+  return (
+    <span className="text-danger">
+      Saqlanmadi —{" "}
+      {failed.retry ? (
+        <button type="button" className={action} onClick={onRetry}>
+          qayta urinish
+        </button>
+      ) : field ? (
+        <button type="button" className={action} onClick={() => onFix(field)}>
+          {failed.message}
+        </button>
+      ) : (
+        failed.message
+      )}
+    </span>
+  );
+}
+
 /** Til tablari: har birida holat matn bilan (rangga tayanmaydi), strelkalar bilan boshqariladi */
 function LangTabs({ tab, onChange, main, problems }: { tab: Lang; onChange: (l: Lang) => void; main: Lang | ""; problems: Problem[] }) {
   function onKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
@@ -870,7 +1050,7 @@ function LangTabs({ tab, onChange, main, problems }: { tab: Lang; onChange: (l: 
   }
 
   return (
-    <div role="tablist" aria-label="Til" className="mt-5 flex gap-1 overflow-x-auto border-b border-line">
+    <div role="tablist" aria-label="Til" className="flex gap-1 overflow-x-auto border-b border-line">
       {LANGS.map((l) => {
         const left = problems.filter((p) => langOf(p.field) === l).length;
         return (
@@ -898,7 +1078,7 @@ function LangTabs({ tab, onChange, main, problems }: { tab: Lang; onChange: (l: 
   );
 }
 
-/** Yuklash holati muharrirda saqlanadi: yuklash tugamaguncha saqlash/yuborish/o‘chirish bloklanadi */
+/** Yuklash holati muharrirda saqlanadi: yuklash tugamaguncha yuborish/o‘chirish va avtosaqlash kutadi */
 function PdfField({
   id,
   bytes,
@@ -940,18 +1120,16 @@ function PdfField({
   // Barcha holatda bitta tuzilma: o‘sha tugma (va klaviatura fokusi) yuklash davomida ham o‘z joyida qoladi
   return (
     <>
-      <div
-        className={`flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl border border-line p-4 sm:p-5 ${bytes === null && !uploading ? "bg-mist" : "bg-paper"}`}
-      >
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         <span
           aria-hidden="true"
-          className={`grid size-12 shrink-0 place-items-center rounded-lg text-xs font-bold ${bytes ? "bg-tile-soft text-tile" : "bg-paper text-muted ring-1 ring-line"} ${uploading ? "animate-pulse motion-reduce:animate-none" : ""}`}
+          className={`grid size-12 shrink-0 place-items-center rounded-lg text-xs font-bold ${bytes ? "bg-tile-soft text-tile" : "bg-mist text-muted"} ${uploading ? "animate-pulse motion-reduce:animate-none" : ""}`}
         >
           PDF
         </span>
         <div className="min-w-[10rem] flex-1">
           <p role="status" className="font-medium">
-            {uploading ? "PDF yuklanmoqda…" : bytes ? "PDF yuklandi va saqlandi" : "Fayl hali yuklanmagan"}
+            {uploading ? "PDF yuklanmoqda…" : bytes ? "PDF yuklandi" : ""}
           </p>
           {uploading ? (
             <p className="text-sm text-muted">Sahifani yopmang.</p>
@@ -1044,26 +1222,17 @@ function AiFill({
     pending: "Formaga qo‘llash",
     done: "Tekshirishni boshlash",
   }[state];
+  const copy = {
+    offer: `PDF’dan sarlavha, mualliflar, annotatsiya va kalit so‘zlar uch tilda yoziladi.${replaces ? " Formadagi hozirgi matnlar almashtirilishi mumkin." : ""}`,
+    working: "Bir necha daqiqa olishi mumkin. Sahifadan chiqmang.",
+    pending: null,
+    done: "Endi har bir bo‘limni tekshirib chiqing — AI ham xato qilishi mumkin.",
+  }[state];
 
   return (
-    <div className="rounded-xl border border-lapis/30 bg-lapis/5 p-4 sm:p-5">
+    <div className="border-t border-line pt-5">
       <p className="font-medium">{title}</p>
-      <p className="mt-1 text-sm text-muted">
-        {state === "offer" && (
-          <>
-            PDF’dan sarlavha, mualliflar, annotatsiya va kalit so‘zlar uch tilda yoziladi.
-            {replaces && " Formadagi hozirgi matnlar almashtirilishi mumkin."} Keyin tekshirib, «Saqlash»ni bosasiz.
-          </>
-        )}
-        {state === "working" && (
-          <>
-            Bu bir necha daqiqa olishi mumkin. Sahifadan chiqmang.
-            <span className="max-lg:hidden"> Jarayon chapdagi AI oynasida ko‘rinadi.</span>
-          </>
-        )}
-        {state === "pending" && "Tugmani bossangiz, AI yozgan matnlar maydonlarga qo‘yiladi. Yangi so‘rov yuborilmaydi."}
-        {state === "done" && "Endi har bir bo‘limni tekshirib chiqing — AI ham xato qilishi mumkin."}
-      </p>
+      {copy && <p className="mt-1 text-sm text-muted">{copy}</p>}
       {error && <p className="mt-2 text-sm text-danger">{error}</p>}
       <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
         <button
@@ -1097,14 +1266,16 @@ function AiFill({
           </a>
         )}
       </div>
+      {/* Kompyuterda «Claude» eslatmasi yonidagi AI panelida doim ko‘rinadi — bu yerda faqat telefonda (ekran o‘quvchiga
+          tugma tavsifi sifatida baribir o‘qiladi). Limit tugagani esa hamma ekranda */}
       {state === "offer" && (
-        <p id="ai-fill-note" className="mt-3 text-xs text-muted">
+        <p id="ai-fill-note" className={`mt-3 text-xs text-muted ${noneLeft ? "" : "lg:hidden"}`}>
           {noneLeft
             ? "Bugungi AI so‘rovlari tugadi — maydonlarni o‘zingiz to‘ldiring yoki ertaga urinib ko‘ring."
             : "PDF tahlil uchun Claude (Anthropic) xizmatiga yuboriladi."}
         </p>
       )}
-      {/* Telefonda (AI oynasi yopiq bo‘lsa) holat e’lon qilinadi; kompyuterda chapdagi panel e’lon qiladi */}
+      {/* Telefonda (AI oynasi yopiq bo‘lsa) holat e’lon qilinadi; kompyuterda yon tomondagi panel e’lon qiladi */}
       <p role="status" className="sr-only lg:hidden">
         {title}
       </p>
@@ -1112,111 +1283,70 @@ function AiFill({
   );
 }
 
-type StepInfo = { n: number; href: string; title: string; left: number };
-
-/** Kabinetdagi yo‘l xaritasi bilan bir xil: ✓ — tayyor, ko‘k halqa — hozirgi qadam, chiziq — keyingilari */
+/** Bosqich belgisi: raqam; tayyor bo‘lsa — belgi (✓ shrift belgisi emas, chizilgan). Hozirgi qadam — ko‘k */
 function StepBadge({ n, state }: { n: number; state: StepState }) {
   return (
     <span
       aria-hidden="true"
-      className={`grid size-9 shrink-0 place-items-center rounded-full text-sm font-semibold ${
-        state === "done"
-          ? "bg-tile text-paper"
-          : state === "current"
-            ? "bg-lapis text-on-lapis ring-4 ring-lapis/15"
-            : "border border-line text-muted"
+      className={`grid size-8 shrink-0 place-items-center rounded-full text-sm font-semibold ${
+        state === "done" ? "bg-tile text-paper" : state === "current" ? "bg-lapis text-on-lapis" : "border border-line text-muted"
       }`}
     >
-      {state === "done" ? "✓" : n}
+      {state === "done" ? (
+        <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m5 12.5 4.5 4.5L19 7.5" />
+        </svg>
+      ) : (
+        n
+      )}
     </span>
   );
 }
 
-/** To‘ldirish tartibidagi bosqich: raqam (tayyor bo‘lsa ✓), sarlavha, holat va qisqa izoh */
+/** To‘ldirish bosqichi: belgi, sarlavha, (kerak bo‘lsa) nechta narsa qolgani va bitta qisqa izoh */
 function Step({
   n,
-  id = `step-${n}`,
   title,
   description,
   state,
   left = 0,
-  chip = false,
-  optional = false,
+  count = false,
   focusable = false,
   children,
 }: {
   n: number;
-  id?: string;
   title: string;
   description?: string;
   state: StepState;
   left?: number;
-  /** Sarlavha yonida "N ta qoldi" / "Tayyor" / "Ixtiyoriy" (PDF va yuborish bosqichlarida holatni o‘zi aytadi) */
-  chip?: boolean;
-  optional?: boolean;
+  /** Sarlavha yonida "N ta qoldi" (PDF bosqichida holatni o‘zi aytadi) */
+  count?: boolean;
   /** Xato bo‘lganda fokus shu bo‘limga ko‘chadi */
   focusable?: boolean;
   children: ReactNode;
 }) {
-  const status = chip ? (left ? `${left} ta qoldi` : optional ? "Ixtiyoriy" : "Tayyor") : state === "done" ? "Tayyor" : null;
+  const id = `step-${n}`;
+  const status = count && left ? `${left} ta qoldi` : state === "done" ? "Tayyor" : null;
   return (
-    <section
-      id={id}
-      tabIndex={focusable ? -1 : undefined}
-      aria-labelledby={`${id}-title`}
-      className={`scroll-mt-4 rounded-xl border bg-paper p-5 outline-none sm:p-6 xl:p-8 ${state === "current" ? "border-lapis/40" : "border-line"}`}
-    >
+    <section id={id} tabIndex={focusable ? -1 : undefined} aria-labelledby={`${id}-title`} className="scroll-mt-4 py-6 outline-none sm:py-8">
       <div className="flex items-start gap-3 sm:gap-4">
         <StepBadge n={n} state={state} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <h2 id={`${id}-title`} className="font-serif text-lg font-semibold leading-snug sm:text-xl xl:text-2xl">
+            <h2 id={`${id}-title`} className="font-serif text-lg font-semibold leading-snug sm:text-xl">
               {title}
               {status && <span className="sr-only"> — {status}</span>}
             </h2>
-            {chip && (
-              <span aria-hidden="true" className={`text-sm ${left || optional ? "text-muted" : "font-medium text-tile"}`}>
-                {status}
+            {count && left > 0 && (
+              <span aria-hidden="true" className="text-sm text-muted">
+                {left} ta qoldi
               </span>
             )}
           </div>
-          {description && <p className="mt-1 max-w-3xl text-sm text-muted xl:text-base">{description}</p>}
+          {description && <p className="mt-1 text-sm text-muted">{description}</p>}
         </div>
       </div>
-      <div className="mt-5 space-y-5 xl:mt-6 xl:space-y-6">{children}</div>
+      <div className="mt-5 space-y-5">{children}</div>
     </section>
-  );
-}
-
-/** To‘ldirish tartibi (ixcham): nechta bosqich tayyor va keyingi qadam — PDF kartasidan keyin turadi */
-function StepNav({ steps }: { steps: StepInfo[] }) {
-  const ready = steps.filter((s) => s.left === 0).length;
-  const next = steps.find((s) => s.left > 0);
-  return (
-    <nav aria-labelledby="steps-title" className="rounded-xl border border-line bg-paper px-4 py-3 sm:px-5">
-      <div className="flex items-center justify-between gap-3 text-sm">
-        <p id="steps-title" className="font-medium">
-          To‘ldirish tartibi
-        </p>
-        <p className="text-muted">
-          {ready}/{steps.length} tayyor
-        </p>
-      </div>
-      <div aria-hidden="true" className="mt-2 h-1.5 overflow-hidden rounded-full bg-mist">
-        <div
-          className="h-full rounded-full bg-tile transition-[width] motion-reduce:transition-none"
-          style={{ width: `${(ready / steps.length) * 100}%` }}
-        />
-      </div>
-      <p className="mt-2 text-sm">
-        {next ? (
-          <a href={next.href} className="link">
-            Keyingi qadam: {next.n}. {next.title}
-          </a>
-        ) : (
-          <span className="font-medium text-tile">Hammasi tayyor</span>
-        )}
-      </p>
-    </nav>
   );
 }

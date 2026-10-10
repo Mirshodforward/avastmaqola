@@ -24,8 +24,9 @@ type Props = PageProps<"/dashboard/articles/[id]">;
 export const metadata: Metadata = { title: "Maqola" };
 
 export default function ArticleEditPage({ params, searchParams }: Props) {
+  // Ko‘pincha muharrir (wide) ochiladi — skelet header’i ham shu enda, yuklangach sakramasin
   return (
-    <Suspense fallback={<DashboardSkeleton />}>
+    <Suspense fallback={<DashboardSkeleton wide />}>
       <ArticleWorkspace params={params} searchParams={searchParams} />
     </Suspense>
   );
@@ -65,7 +66,7 @@ async function ArticleWorkspace({ params, searchParams }: Pick<Props, "params" |
     };
     const [editable, view] = await Promise.all([getEditableProfile(user.id), loadArticleView(article.id, false)]);
     return (
-      <DashboardShell admin={admin} wide>
+      <DashboardShell admin={admin} moderator={user.role === "moderator"} wide>
         <div className="mx-auto max-w-[100rem]">
           <ArticleEditor
             header={
@@ -110,7 +111,7 @@ async function ArticleWorkspace({ params, searchParams }: Pick<Props, "params" |
   const panel = zenodo ? await loadZenodoPanel(zenodo, own) : null;
   const flash = panel ? zenodoFlash((await searchParams).zenodo) : null;
   return (
-    <DashboardShell admin={admin}>
+    <DashboardShell admin={admin} moderator={user.role === "moderator"}>
       <Link href="/dashboard" className="link text-sm">
         ← Kabinet
       </Link>

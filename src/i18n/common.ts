@@ -40,8 +40,12 @@ const uz = {
     loading: "Yuklanmoqda",
   },
   switcher: {
-    // til almashtirgich (keyin quriladi)
+    // lang-switcher.tsx
     label: "Tilni tanlash",
+  },
+  themeToggle: {
+    // theme-toggle.tsx
+    label: "Tungi rejim",
   },
 };
 
@@ -79,6 +83,7 @@ export const commonText: Record<Lang, typeof uz> = {
       loading: "Загрузка",
     },
     switcher: { label: "Выбор языка" },
+    themeToggle: { label: "Тёмная тема" },
   },
   en: {
     rootLayout: {
@@ -112,5 +117,6 @@ export const commonText: Record<Lang, typeof uz> = {
       loading: "Loading",
     },
     switcher: { label: "Choose language" },
+    themeToggle: { label: "Dark mode" },
   },
 };

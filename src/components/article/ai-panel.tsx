@@ -32,11 +32,20 @@ export function SparkIcon({ className = "size-4" }: { className?: string }) {
   );
 }
 
+/** Yopish belgisi (oyna va ko‘rinish oynasi uchun): chizilgan, shrift belgisi emas */
+export function CloseIcon({ className = "size-5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M6 6l12 12M18 6 6 18" />
+    </svg>
+  );
+}
+
 export function AiPanel({
   assistant,
   hasPdf,
   hasContent,
-  onPreview,
+  fillOffered = false,
   onFocusField,
   onPickPdf,
   onClose,
@@ -45,9 +54,11 @@ export function AiPanel({
   hasPdf: boolean;
   /** Formada sarlavha yoki annotatsiya bor: tarjima va kalit so‘zlar uchun yetarli */
   hasContent: boolean;
-  onPreview: () => void;
+  /** PDF kartasida to‘ldirish taklifi ko‘rinib turibdi — panel uni takrorlamaydi */
+  fillOffered?: boolean;
   onFocusField: (field: string) => void;
-  onPickPdf: () => void;
+  /** Faqat telefon oynasida: kompyuterda PDF tugmasi yonidagi 1-bosqichda turibdi */
+  onPickPdf?: () => void;
   /** Mobil oynada: panelni yopish */
   onClose?: () => void;
 }) {
@@ -112,22 +123,27 @@ export function AiPanel({
               ? "AI javob tayyorlamoqda."
               : "";
 
+  // So‘rovlar soni faqat oz qolganda ko‘rsatiladi
   const hint = tooLong
     ? `Matn juda uzun: ${NUMBER.format(text.length)} belgi (ko‘pi bilan ${NUMBER.format(MESSAGE_MAX)}).`
     : text.length > 2000
       ? `${NUMBER.format(text.length)} belgi`
       : noneLeft
         ? "Bugungi so‘rovlar tugadi — ertaga davom eting."
-        : remaining !== null
+        : remaining !== null && remaining <= 5
           ? `Bugun yana ${remaining} ta so‘rov yuborishingiz mumkin.`
           : null;
 
+  // Boshlash tugmalari: to‘ldirish PDF kartasida taklif qilinib turgan bo‘lsa takrorlanmaydi
+  const actions =
+    hasPdf || hasContent
+      ? [hasPdf && !fillOffered && ACTIONS.fill, hasContent && ACTIONS.check, ACTIONS.keywords].filter((a) => a !== false)
+      : [];
+
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-3 border-b border-line px-4 py-3">
-        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-lapis text-on-lapis">
-          <SparkIcon className="size-5" />
-        </span>
+      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-line px-4">
+        <SparkIcon className="size-4 shrink-0 text-lapis" />
         <h2 className="min-w-0 flex-1 font-serif text-base font-semibold leading-tight">AI yordamchi</h2>
         {messages.length > 0 && (
           <button type="button" className="btn btn-ghost px-2.5 py-1.5 text-sm" onClick={clear}>
@@ -136,7 +152,7 @@ export function AiPanel({
         )}
         {onClose && (
           <button type="button" className="btn btn-ghost px-2.5 py-1.5" onClick={onClose} aria-label="AI yordamchini yopish">
-            <span aria-hidden="true">✕</span>
+            <CloseIcon />
           </button>
         )}
       </div>
@@ -152,48 +168,31 @@ export function AiPanel({
         {messages.length === 0 ? (
           <div className="text-sm leading-relaxed">
             <p>
-              Sarlavha, annotatsiya va kalit so‘zlarni o‘zbek, rus va ingliz tillarida yozib, mualliflar ro‘yxatini
-              tuzib beraman.
+              {hasPdf
+                ? "Maydonlarni PDF’dan uch tilda to‘ldirib beraman."
+                : "PDF yuklang yoki maqola matnini pastga joylashtiring — maydonlarni uch tilda to‘ldirib beraman."}
             </p>
-            {/* Kompyuterda asosiy (ko‘k) tugma o‘ngdagi PDF kartasida; bu yerda — ikkinchi darajali */}
-            {hasPdf || hasContent ? (
-              <>
-                <p className="mt-2 text-muted">
-                  {hasPdf
-                    ? "PDF yuklangan — tugmani bosing yoki savolingizni yozing."
-                    : "Formadagi matn bilan ishlay olaman. Butun maqolani to‘ldirish uchun PDF yuklang yoki matnini pastga joylashtiring."}
-                </p>
-                <ul className="mt-4 space-y-2">
-                  {[hasPdf && ACTIONS.fill, hasContent && ACTIONS.check, ACTIONS.keywords]
-                    .filter((a) => a !== false)
-                    .map((a) => (
-                      <li key={a.label}>
-                        <QuickButton
-                          primary={a === ACTIONS.fill && Boolean(onClose)}
-                          disabled={noneLeft}
-                          onClick={() => submit(a.text)}
-                        >
-                          {a.label}
-                        </QuickButton>
-                      </li>
-                    ))}
-                </ul>
-              </>
-            ) : (
-              <>
-                <p className="mt-2 text-muted">Boshlash uchun maqolani bering:</p>
-                <ul className="mt-4 space-y-2">
-                  <li>
-                    <QuickButton primary={Boolean(onClose)} onClick={onPickPdf}>
-                      PDF faylni yuklash
-                    </QuickButton>
-                  </li>
-                  <li>
-                    <QuickButton onClick={() => input.current?.focus()}>Maqola matnini chatga joylashtirish</QuickButton>
-                  </li>
-                </ul>
-              </>
-            )}
+            <ul className="mt-4 space-y-2">
+              {actions.map((a) => (
+                <li key={a.label}>
+                  <QuickButton primary={a === ACTIONS.fill && Boolean(onClose)} disabled={noneLeft} onClick={() => submit(a.text)}>
+                    {a.label}
+                  </QuickButton>
+                </li>
+              ))}
+              {actions.length === 0 && onPickPdf && (
+                <li>
+                  <QuickButton primary onClick={onPickPdf}>
+                    PDF faylni yuklash
+                  </QuickButton>
+                </li>
+              )}
+              {actions.length === 0 && (
+                <li>
+                  <QuickButton onClick={() => input.current?.focus()}>Maqola matnini chatga joylashtirish</QuickButton>
+                </li>
+              )}
+            </ul>
           </div>
         ) : (
           messages.map((m) =>
@@ -210,7 +209,6 @@ export function AiPanel({
                   if (prompt) submit(prompt.text);
                 }}
                 onToggle={() => toggle(m.id)}
-                onPreview={onPreview}
                 onFocusField={onFocusField}
               />
             ),
@@ -236,21 +234,24 @@ export function AiPanel({
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Savol yoki maqola matni…"
+          placeholder="Savol yoki maqola matni (Enter — yuborish)"
           aria-invalid={tooLong || undefined}
-          aria-describedby={`${inputId}-hint`}
+          aria-describedby={hint ? `${inputId}-hint` : undefined}
           className="input max-h-48 min-h-0 resize-y leading-relaxed"
         />
-        <div className="mt-2 flex items-center gap-3">
-          <p id={`${inputId}-hint`} className={`min-w-0 flex-1 text-xs ${tooLong ? "text-danger" : "text-muted"}`}>
-            {hint ?? <span className="hidden pointer-fine:inline">Enter — yuborish, Shift+Enter — yangi qator</span>}
+        {hint && (
+          <p id={`${inputId}-hint`} className={`mt-1.5 text-xs ${tooLong ? "text-danger" : "text-muted"}`}>
+            {hint}
           </p>
+        )}
+        <div className="mt-2 flex items-center gap-3">
+          {/* Ma’lumot qayerga ketishi — yagona joyda, yuborish tugmasi yonida */}
+          <p className="min-w-0 flex-1 text-xs text-muted">Matn va PDF tahlil uchun Claude (Anthropic) xizmatiga yuboriladi.</p>
           {/* Javob kutilayotganda ham tugma o‘z joyida: ikki marta bosish «To‘xtatish»ga tushib qolmasin */}
           <button type="submit" className="btn btn-primary" aria-disabled={busy || noneLeft || !text.trim() || tooLong}>
             Yuborish
           </button>
         </div>
-        <p className="mt-2 text-xs text-muted">Matn va PDF tahlil uchun Claude (Anthropic) xizmatiga yuboriladi.</p>
       </form>
       <p role="status" className="sr-only">
         {announcement}
@@ -308,7 +309,6 @@ function AssistantMessage({
   onStop,
   retry,
   onToggle,
-  onPreview,
   onFocusField,
 }: {
   m: ChatMessage;
@@ -316,7 +316,6 @@ function AssistantMessage({
   onStop: () => void;
   retry: () => void;
   onToggle: () => void;
-  onPreview: () => void;
   onFocusField: (field: string) => void;
 }) {
   const working = m.state && m.state in STATUS;
@@ -333,10 +332,10 @@ function AssistantMessage({
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted">
             <span className="flex items-center gap-2">
               <span className="flex gap-1" aria-hidden="true">
-                {[0, 150, 300].map((d) => (
+                {[0, 200, 400].map((d) => (
                   <span
                     key={d}
-                    className="size-1.5 animate-bounce rounded-full bg-tile motion-reduce:animate-none"
+                    className="size-1.5 animate-pulse rounded-full bg-tile motion-reduce:animate-none"
                     style={{ animationDelay: `${d}ms` }}
                   />
                 ))}
@@ -383,16 +382,9 @@ function AssistantMessage({
                 tekshiring.
               </p>
             )}
-            <div className="mt-3 flex flex-wrap gap-2">
-              {m.proposal.applied && (
-                <button type="button" className="btn btn-secondary px-3 py-2 text-sm" onClick={onPreview}>
-                  Ko‘rish va yuborish
-                </button>
-              )}
-              <button type="button" className="btn btn-secondary px-3 py-2 text-sm" onClick={onToggle}>
-                {m.proposal.applied ? "O‘zgarishlarni qaytarish" : m.proposal.undone ? "Qayta qo‘llash" : "Formaga qo‘llash"}
-              </button>
-            </div>
+            <button type="button" className="btn btn-secondary mt-3 px-3 py-2 text-sm" onClick={onToggle}>
+              {m.proposal.applied ? "O‘zgarishlarni qaytarish" : m.proposal.undone ? "Qayta qo‘llash" : "Formaga qo‘llash"}
+            </button>
           </div>
         )}
 

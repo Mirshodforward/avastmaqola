@@ -5,6 +5,7 @@ import {
   check,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   smallint,
@@ -26,6 +27,7 @@ import { UNIVERSITY_NAME } from "../../lib/brand";
 import { LANGS, type Lang } from "../../lib/langs";
 import { ACADEMIC_DEGREES, type AcademicDegree } from "../../lib/profile-labels";
 import { RATING_STATUSES, type RatingStatus } from "../../lib/rating-rules";
+import type { PresenceResult } from "../../lib/web-presence";
 
 const sqlList = (values: readonly string[]) => sql.raw(values.map((v) => `'${v}'`).join(", "));
 
@@ -280,7 +282,13 @@ export type AiRequestStatus =
   | "aborted" // o‘qituvchi to‘xtatdi yoki sahifani yopdi
   | "error";
 
-/** AI yordamchi chaqiruvlari: kunlik limit, admin statistikasi va xarajat hisobi uchun. Matnning o‘zi saqlanmaydi. */
+/** assistant — maqola muharriridagi AI yordamchi; web — "Internetdagi ma’lumotlarim" izlashi */
+export type AiRequestKind = "assistant" | "web";
+
+/**
+ * AI chaqiruvlari: kunlik limit, admin statistikasi va xarajat hisobi uchun. Yordamchi matni saqlanmaydi;
+ * internetdagi izlashning natijasi (topilgan havolalar) result’da — uni faqat egasi ko‘radi.
+ */
 export const aiRequests = pgTable(
   "ai_requests",
   {
@@ -289,6 +297,7 @@ export const aiRequests = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     articleId: integer("article_id").references(() => articles.id, { onDelete: "set null" }),
+    kind: text("kind").$type<AiRequestKind>().notNull().default("assistant"),
     status: text("status").$type<AiRequestStatus>().notNull().default("running"),
     model: text("model").notNull(),
     withPdf: boolean("with_pdf").notNull().default(false),
@@ -298,6 +307,8 @@ export const aiRequests = pgTable(
     cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
     costMicroUsd: integer("cost_micro_usd").notNull().default(0), // taxminiy narx, 1 USD = 1 000 000
     proposedFields: integer("proposed_fields").notNull().default(0), // taklifdagi maydonlar soni
+    webSearches: integer("web_searches").notNull().default(0), // veb-qidiruvlar soni (har biri $0.01, narxga qo‘shilgan)
+    result: jsonb("result").$type<PresenceResult>(),
     durationMs: integer("duration_ms"),
     error: text("error"), // qisqa xato kodi (matnsiz)
     createdAt: createdAt(),
@@ -309,6 +320,7 @@ export const aiRequests = pgTable(
       "ai_requests_status_valid",
       sql`${t.status} in ('running', 'ok', 'refusal', 'truncated', 'aborted', 'error')`,
     ),
+    check("ai_requests_kind_valid", sql`${t.kind} in ('assistant', 'web')`),
   ],
 );
 

@@ -50,7 +50,8 @@ export type ArticleView = {
     academicDegree: AcademicDegree | null;
     bio: string | null;
   };
-  others: { id: number; title: string }[];
+  /** title — asl tilida; titles — sahifa tilidagisi uchun (bo‘sh bo‘lishi mumkin) */
+  others: { id: number; title: string; titles: Record<Lang, string> }[];
 };
 
 export async function loadArticleView(id: number, publishedOnly: boolean): Promise<ArticleView | null> {
@@ -141,6 +142,10 @@ export async function loadArticleView(id: number, publishedOnly: boolean): Promi
       academicDegree: visible ? owner.academicDegree : null,
       bio: visible ? owner.bio : null,
     },
-    others: others.map((o) => ({ id: o.id, title: titleIn(o) })),
+    others: others.map((o) => ({
+      id: o.id,
+      title: titleIn(o),
+      titles: { uz: o.titleUz ?? "", ru: o.titleRu ?? "", en: o.titleEn ?? "" },
+    })),
   };
 }

@@ -1,5 +1,8 @@
 // Manba: src/components/rating/*, src/app/admin/iqtiboslar/page.tsx, src/components/article/article-view.tsx (baho havolasi).
-// i18n’ga ko‘chirishda ru/en shu kalitlar bilan qo‘shiladi (src/i18n/rating.ts).
+// Maqola sahifasi uch tilda — ratingText[lang]; admin paneli o‘zbekcha (T). Ruscha/inglizchada bo‘lim «Отзывы»/«Reviews»:
+// mazmuni baho va fikr (o‘zbekchadagi «iqtibos» shu ma’noda)
+import { enPlural, ruPlural } from "@/i18n/plural";
+import type { Lang } from "@/lib/langs";
 
 const uz = {
   section: {
@@ -7,27 +10,23 @@ const uz = {
     count: (n: number) => `${n} ta baho`,
     empty: "Hali baho yo‘q",
     average: (avg: string) => `O‘rtacha baho: 5 dan ${avg}`,
-    distribution: "Baholar taqsimoti",
-    distributionRow: (stars: number, n: number) => `${stars} yulduz: ${n} ta`,
-    all: (n: number) => `Barcha iqtiboslar (${n})`,
-  },
-  deck: {
-    label: "Iqtiboslar",
-    slide: "iqtibos",
-    position: (i: number, n: number) => `${i} / ${n}`,
-    prev: "Oldingi iqtibos",
-    next: "Keyingi iqtibos",
-    empty: "Birinchi iqtibosni siz qoldiring.",
-    stars: (n: number) => `${n} yulduz`,
+    more: (n: number) => `Yana ${n} ta iqtibos`,
+    less: "Yashirish",
+    /** Oynani ochadigan tugma (maqola tepasida ham, «Iqtiboslar» bo‘limida ham) */
+    write: "Iqtibos keltirish",
   },
   form: {
-    title: "Sizning bahoingiz",
+    /** Oyna sarlavhasi — uni ochgan tugma bilan bir xil */
+    title: "Iqtibos keltirish",
+    close: "Yopish",
     stars: "Baho",
     star: (n: number) => `${n} yulduz`,
+    /** Faqat ekran o‘quvchi uchun (aria-label) */
     starWords: ["Juda zaif", "Zaif", "O‘rtacha", "Yaxshi", "A’lo"],
     body: "Iqtibos",
     bodyPlaceholder: "Maqola haqida fikringiz",
-    bodyMin: (n: number) => `Kamida ${n} ta belgi`,
+    /** Server xabari bilan bir xil (ratingInputSchema) */
+    bodyMin: (n: number) => `Kamida ${n} ta belgi yozing`,
     counter: (n: number, max: number) => `${n} / ${max}`,
     submit: "Yuborish",
     sent: "Yuborildi. Admin tasdiqlagach saytda ko‘rinadi.",
@@ -36,11 +35,10 @@ const uz = {
       approved: "Bahoingiz saytda chop etilgan. Tahrirlasangiz, qayta moderatsiyaga tushadi.",
       rejected: "Bahoingiz rad etildi. Tahrirlab, qayta yuboring.",
     },
-    signIn: "Baho berish uchun tizimga kiring.",
-    expired: "Sessiya tugadi. Baho berish uchun qayta kiring.",
+    signIn: "Iqtibos keltirish uchun avval tizimga kiring.",
+    expired: "Sessiya tugadi. Iqtibos keltirish uchun qayta kiring.",
     signInButton: "Kirish",
-    register: "Ro‘yxatdan o‘tish",
-    own: "Bu sizning maqolangiz. O‘z maqolangizga baho bera olmaysiz.",
+    own: "Bu sizning maqolangiz: o‘z maqolangizga baho berib, iqtibos keltira olmaysiz.",
     loading: "Yuklanmoqda",
     starsRequired: "Yulduzlardan birini tanlang",
   },
@@ -65,5 +63,117 @@ const uz = {
 export type RatingText = typeof uz;
 export const T: RatingText = uz;
 
-/** "4,8" — o‘zbekcha o‘nli vergul bilan */
-export const formatAverage = (avg: number) => avg.toFixed(1).replace(".", ",");
+const RU_RATINGS: [string, string, string] = ["оценка", "оценки", "оценок"];
+const RU_REVIEWS: [string, string, string] = ["отзыв", "отзыва", "отзывов"];
+
+export const ratingText: Record<Lang, RatingText> = {
+  uz,
+  ru: {
+    section: {
+      title: "Отзывы",
+      count: (n) => `${n} ${ruPlural(n, RU_RATINGS)}`,
+      empty: "Оценок пока нет",
+      average: (avg) => `Средняя оценка: ${avg} из 5`,
+      more: (n) => `Ещё ${n} ${ruPlural(n, RU_REVIEWS)}`,
+      less: "Скрыть",
+      write: "Оставить отзыв",
+    },
+    form: {
+      title: "Оставить отзыв",
+      close: "Закрыть",
+      stars: "Оценка",
+      star: (n) => `${n} ${ruPlural(n, ["звезда", "звезды", "звёзд"])}`,
+      starWords: ["Очень слабо", "Слабо", "Средне", "Хорошо", "Отлично"],
+      body: "Отзыв",
+      bodyPlaceholder: "Ваше мнение о статье",
+      bodyMin: (n) => `Напишите не менее ${n} ${ruPlural(n, ["символа", "символов", "символов"])}`,
+      counter: (n, max) => `${n} / ${max}`,
+      submit: "Отправить",
+      sent: "Отправлено. Отзыв появится на сайте после одобрения администратором.",
+      status: {
+        pending: "Ваш отзыв на модерации.",
+        approved: "Ваш отзыв опубликован на сайте. Если вы его измените, он снова пройдёт модерацию.",
+        rejected: "Ваш отзыв отклонён. Отредактируйте его и отправьте снова.",
+      },
+      signIn: "Чтобы оставить отзыв, сначала войдите в систему.",
+      expired: "Сессия истекла. Войдите снова, чтобы оставить отзыв.",
+      signInButton: "Войти",
+      own: "Это ваша статья: оценивать собственную статью и оставлять к ней отзыв нельзя.",
+      loading: "Загрузка",
+      starsRequired: "Выберите оценку",
+    },
+    badge: {
+      rate: "Оценить",
+      label: (avg, n) => `Средняя оценка ${avg}, ${n} ${ruPlural(n, RU_RATINGS)}`,
+    },
+    admin: {
+      title: "Отзывы",
+      queue: "Очередь модерации",
+      empty: "Очередь пуста.",
+      recent: "Последние решения",
+      approve: "Опубликовать",
+      reject: "Отклонить",
+      remove: "Удалить",
+      status: { pending: "На модерации", approved: "Опубликован", rejected: "Отклонён" },
+      meta: (name, date) => `${name}, ${date}`,
+      conflict: "Отзыв за это время изменился. Обновите страницу, чтобы увидеть новый текст.",
+    },
+  },
+  en: {
+    section: {
+      title: "Reviews",
+      count: (n) => `${n} ${enPlural(n, "rating", "ratings")}`,
+      empty: "No ratings yet",
+      average: (avg) => `Average rating: ${avg} out of 5`,
+      more: (n) => `${n} more ${enPlural(n, "review", "reviews")}`,
+      less: "Show less",
+      write: "Write a review",
+    },
+    form: {
+      title: "Write a review",
+      close: "Close",
+      stars: "Rating",
+      star: (n) => `${n} ${enPlural(n, "star", "stars")}`,
+      starWords: ["Very poor", "Poor", "Average", "Good", "Excellent"],
+      body: "Review",
+      bodyPlaceholder: "Your thoughts on the article",
+      bodyMin: (n) => `Write at least ${n} characters`,
+      counter: (n, max) => `${n} / ${max}`,
+      submit: "Submit",
+      sent: "Sent. Your review will appear on the site after an administrator approves it.",
+      status: {
+        pending: "Your review is awaiting moderation.",
+        approved: "Your review is published. If you edit it, it goes back to moderation.",
+        rejected: "Your review was rejected. Edit it and submit it again.",
+      },
+      signIn: "Sign in first to write a review.",
+      expired: "Your session has expired. Sign in again to write a review.",
+      signInButton: "Sign in",
+      own: "This is your article: you can't rate or review your own article.",
+      loading: "Loading",
+      starsRequired: "Choose a rating",
+    },
+    badge: {
+      rate: "Rate",
+      label: (avg, n) => `Average rating ${avg}, ${n} ${enPlural(n, "rating", "ratings")}`,
+    },
+    admin: {
+      title: "Reviews",
+      queue: "Moderation queue",
+      empty: "The queue is empty.",
+      recent: "Recent decisions",
+      approve: "Publish",
+      reject: "Reject",
+      remove: "Remove",
+      status: { pending: "Pending", approved: "Published", rejected: "Rejected" },
+      meta: (name, date) => `${name}, ${date}`,
+      conflict: "The review changed in the meantime. Refresh the page to see the new text.",
+    },
+  },
+};
+
+/** "4,8" — o‘zbekcha va ruscha o‘nli vergul bilan, inglizcha nuqta bilan */
+export const formatAverage = (avg: number, lang: Lang = "uz") => {
+  const text = avg.toFixed(1);
+  return lang === "en" ? text : text.replace(".", ",");
+};

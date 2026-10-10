@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { postJson } from "@/lib/api-client";
 
-export function LogoutButton() {
+export function LogoutButton({ className = "btn btn-ghost" }: { className?: string }) {
   const [pending, setPending] = useState(false);
 
   async function logout() {
@@ -14,7 +14,7 @@ export function LogoutButton() {
   }
 
   return (
-    <button type="button" onClick={logout} disabled={pending} className="btn btn-ghost">
+    <button type="button" onClick={logout} disabled={pending} className={className}>
       {pending ? "Chiqilmoqda…" : "Chiqish"}
     </button>
   );

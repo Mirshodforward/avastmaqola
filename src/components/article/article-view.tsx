@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { OrcidIcon } from "@/components/orcid-icon";
 import { Avatar } from "@/components/profile/avatar";
+import { RATING_DIALOG_ID } from "@/components/rating/rating-dialog";
 import { Stars } from "@/components/rating/stars";
-import { T as RT, formatAverage } from "@/components/rating/text";
-import { LICENSE_INFO, VENUE_LABELS } from "@/lib/article-rules";
+import { formatAverage, ratingText } from "@/components/rating/text";
+import { articleViewText } from "@/i18n/article-view";
+import { localePath } from "@/i18n/lang";
+import { LICENSE_INFO, type VenueType } from "@/lib/article-rules";
 import { ARTICLE_SOURCE } from "@/lib/brand";
 import { apaCitation, bibtexCitation, doiUrl, venueTail } from "@/lib/citation";
 import { formatBytes, formatDate, truncate, yearOf } from "@/lib/format";
@@ -23,52 +26,60 @@ export function ArticleView({
   absoluteUrl,
   preview = false,
   rating,
+  lang = "uz",
+  allLangs = false,
 }: {
   v: View;
   absoluteUrl: string;
   preview?: boolean;
   /** Ommaviy sahifada: o‘rtacha baho — pastdagi "Iqtiboslar" bo‘limiga havola */
   rating?: { avg: number; count: number };
+  /** Sahifa tili: sarlavha va annotatsiya faqat shu tilda */
+  lang?: Lang;
+  /** Ko‘rib chiquvchilar uchun: asl tildan boshlab uch tildagi sarlavha va annotatsiyalar hammasi */
+  allLangs?: boolean;
 }) {
-  const title = v.titles[v.lang];
+  const t = articleViewText[lang];
+  const RT = ratingText[lang];
+  const main = allLangs ? v.lang : shownLang(v, lang);
+  const title = v.titles[main];
   const year = yearOf(v.publishedAt ?? v.updatedAt);
-  // "3-son, 12-maqola" — sahifadagi va iqtibosdagi raqam (saytdagi №id emas)
+  // "3-son, 12-maqola" — sahifadagi va iqtibosdagi raqam (saytdagi №id emas). Iqtibos jurnal nomi kabi o‘zbekcha qoladi
   const place = issueLabel(v.issueNo, v.issueSeq);
   // Zenodo DOI’si (nashriyot DOI’si bo‘lmasa): nashr qatori o‘rnida va iqtiboslarda. "Chop etilgan" sanasi o‘zgarmaydi
   const zenodo: View["publication"] =
     v.zenodoDoi && !v.publication?.doi
       ? { type: null, venue: null, volume: null, issue: null, pages: null, year: null, doi: v.zenodoDoi }
       : null;
-  const cite = { id: v.id, title, authors: v.authors, year, url: absoluteUrl, source: ARTICLE_SOURCE, place: v.issueSeq ? place : null, publication: v.publication ?? zenodo };
+  // Iqtibos asl tildagi sarlavha bilan — Scholar va kutubxonalardagi yozuv shu
+  const cite = { id: v.id, title: v.titles[v.lang], authors: v.authors, year, url: absoluteUrl, source: ARTICLE_SOURCE, place: v.issueSeq ? place : null, publication: v.publication ?? zenodo };
   const license = LICENSE_INFO[v.license];
   // Muassasalar birinchi uchragan tartibida. Hamma bitta muassasadan bo‘lsa, raqamlar ortiqcha
   const institutions = [...new Set(v.authors.map((a) => a.institution).filter((name) => name !== null))];
   const numbered = institutions.length > 1 || (institutions.length === 1 && v.authors.some((a) => !a.institution));
 
-  // Sahifa matni o‘zbekcha; sarlavha va annotatsiyalar o‘z tilida (ekran o‘quvchi talaffuzi uchun).
+  // Sahifa matni sahifa tilida; sarlavha va annotatsiyalar o‘z tilida (ekran o‘quvchi talaffuzi uchun).
   // break-words: sarlavhadagi uzun bo‘linmas so‘z (formula, havola) telefonda sahifani kengaytirmasin
   return (
-    <article lang="uz" className="mx-auto max-w-3xl break-words">
+    <article lang={lang} className="mx-auto max-w-3xl break-words">
       {preview && (
-        <p className="mb-6 rounded-lg border border-lapis/30 bg-paper px-3 py-2 text-sm text-lapis">
-          Oldindan ko‘rish. Sahifa ommaga faqat universitet tasdiqlagach ochiladi.
-        </p>
+        <p className="mb-6 rounded-lg border border-lapis/30 bg-paper px-3 py-2 text-sm text-lapis">{t.preview}</p>
       )}
 
       <p className="text-sm text-muted">
-        Ilmiy maqola.{" "}
+        {t.kind}{" "}
         {v.publishedAt ? (
           <>
             {/* Boshqa joyda chiqqan maqolaning nashr yili pastdagi nashr qatorida — bu sana faqat saytga joylangan kun */}
-            {v.publication ? "Saytga joylangan" : "Chop etilgan"}:{" "}
-            <time dateTime={new Date(v.publishedAt).toISOString()}>{formatDate(v.publishedAt)}</time>
+            {v.publication ? t.postedOnSite : t.published}:{" "}
+            <time dateTime={new Date(v.publishedAt).toISOString()}>{formatDate(v.publishedAt, lang)}</time>
           </>
         ) : (
-          "Hali chop etilmagan."
+          t.notPublished
         )}
       </p>
 
-      <h1 lang={v.lang} className="mt-2 font-serif text-3xl font-semibold leading-tight tracking-tight sm:text-4xl">
+      <h1 lang={main} className="mt-2 font-serif text-3xl font-semibold leading-tight tracking-tight sm:text-4xl">
         {title}
       </h1>
 
@@ -79,7 +90,7 @@ export function ArticleView({
             <span key={i}>
               {i > 0 && ", "}
               {a.isOwner && v.owner.slug ? (
-                <Link href={`/oqituvchi/${v.owner.slug}`} rel="author" className="link">
+                <Link href={localePath(lang, `/oqituvchi/${v.owner.slug}`)} rel="author" className="link">
                   {name}
                 </Link>
               ) : (
@@ -107,29 +118,36 @@ export function ArticleView({
         institutions.length > 0 && <p className="mt-1 text-sm text-muted">{institutions[0]}</p>
       )}
 
-      {v.publication && <PublicationLine p={v.publication} />}
-      {zenodo && <PublicationLine p={zenodo} />}
+      {v.publication && <PublicationLine p={v.publication} venues={t.venues} />}
+      {zenodo && <PublicationLine p={zenodo} venues={t.venues} />}
 
       <p className="mt-3 text-sm text-muted">
-        {place}. Litsenziya:{" "}
+        {t.place(v.issueNo, v.issueSeq)}. {t.license}:{" "}
         {license.url ? (
           <a href={license.url} className="link" target="_blank" rel="license noopener noreferrer">
             {license.label}
           </a>
         ) : (
-          license.label
+          (t.licenses[v.license] ?? license.label)
         )}
       </p>
 
       <div className="mt-6 flex flex-wrap gap-3">
         {v.pdfBytes && (
           <a href={`/maqola/${v.id}/pdf`} className="btn btn-primary btn-lg" target="_blank" rel="noopener">
-            PDF ochish ({formatBytes(v.pdfBytes)})
+            {t.openPdf(formatBytes(v.pdfBytes))}
           </a>
         )}
-        <a href="#iqtibos" className="btn btn-secondary btn-lg">
-          Iqtibos keltirish
-        </a>
+        {/* «Iqtibos keltirish» — baho va fikr oynasi (rating-dialog.tsx), faqat ommaviy sahifada: preview, admin va
+            moderator drawer’ida rating berilmaydi — u yerlarda faqat APA / BibTeX */}
+        {rating && (
+          <button type="button" popoverTarget={RATING_DIALOG_ID} className="btn btn-secondary btn-lg">
+            {RT.section.write}
+          </button>
+        )}
+        <button type="button" popoverTarget="iqtibos" className="btn btn-ghost btn-lg">
+          APA / BibTeX
+        </button>
         {!preview && (
           <a
             href={`https://t.me/share/url?url=${encodeURIComponent(absoluteUrl)}&text=${encodeURIComponent(title)}`}
@@ -137,19 +155,19 @@ export function ArticleView({
             target="_blank"
             rel="noopener noreferrer"
           >
-            Telegram’da ulashish
+            {t.shareTelegram}
           </a>
         )}
         {rating && (
           <a
             href="#iqtiboslar"
             className="btn btn-ghost btn-lg"
-            aria-label={rating.count ? RT.badge.label(formatAverage(rating.avg), rating.count) : undefined}
+            aria-label={rating.count ? RT.badge.label(formatAverage(rating.avg, lang), rating.count) : undefined}
           >
             <Stars value={rating.avg} tone="paper" className="text-lg" />
             {rating.count ? (
               <>
-                <span className="font-semibold">{formatAverage(rating.avg)}</span>
+                <span className="font-semibold">{formatAverage(rating.avg, lang)}</span>
                 <span className="text-muted">({rating.count})</span>
               </>
             ) : (
@@ -159,13 +177,13 @@ export function ArticleView({
         )}
       </div>
 
-      {/* Uch tildagi annotatsiyalar: hammasi ochiq matn, tablarsiz (Scholar to‘liq annotatsiyani ko‘rishi shart) */}
-      <section lang={v.lang} id={`annotatsiya-${v.lang}`} className="mt-10">
-        <h2 className="font-serif text-lg font-semibold">{ABSTRACT_HEADINGS[v.lang]}</h2>
-        <Paragraphs text={v.abstracts[v.lang]} />
-        <Keywords lang={v.lang} list={v.keywords[v.lang]} />
+      {/* Annotatsiya ochiq matn, tablarsiz (Scholar to‘liq annotatsiyani ko‘rishi shart); sahifada bitta — sahifa tilida */}
+      <section lang={main} id={`annotatsiya-${main}`} className="mt-10">
+        <h2 className="font-serif text-lg font-semibold">{ABSTRACT_HEADINGS[main]}</h2>
+        <Paragraphs text={v.abstracts[main]} />
+        <Keywords lang={main} list={v.keywords[main]} />
       </section>
-      {LANGS.filter((l) => l !== v.lang && v.titles[l]).map((l) => (
+      {(allLangs ? LANGS.filter((l) => l !== v.lang && v.titles[l]) : []).map((l) => (
         <section key={l} lang={l} id={`annotatsiya-${l}`} className="mt-10 border-t border-line pt-8">
           <p className="font-serif text-lg font-semibold leading-snug">{v.titles[l]}</p>
           <h2 className="mt-3 text-base font-semibold text-muted">{ABSTRACT_HEADINGS[l]}</h2>
@@ -174,26 +192,49 @@ export function ArticleView({
         </section>
       ))}
 
-      <section id="iqtibos" className="mt-12 border-t border-line pt-8">
-        <h2 className="font-serif text-lg font-semibold">Iqtibos keltirish</h2>
-        <p className="mt-4 text-sm font-medium">APA</p>
-        <p className="mt-1 rounded-lg border border-line bg-paper p-4 text-sm leading-relaxed">{apaCitation(cite)}</p>
-        <p className="mt-4 text-sm font-medium">BibTeX</p>
-        <pre className="mt-1 overflow-x-auto rounded-lg border border-line bg-paper p-4 text-xs leading-relaxed">
-          {bibtexCitation(cite)}
-        </pre>
-      </section>
+      {/* Akademik havola (APA, BibTeX) sahifada ochiq turmaydi — «APA / BibTeX» bosilganda oynada. Popover API: JS’siz
+          ochiladi, tashqariga bosish va Esc yopadi. Display klassi faqat ichki div’da: popover’ning yopiq holatini bekor qilmasin */}
+      <div
+        id="iqtibos"
+        popover="auto"
+        role="dialog"
+        aria-labelledby="iqtibos-title"
+        className="m-auto max-h-[calc(100dvh-2rem)] w-[min(42rem,calc(100%-2rem))] rounded-2xl border border-line bg-paper p-0 text-ink backdrop:bg-ink/50"
+      >
+        <div className="p-6">
+          <div className="flex items-start justify-between gap-4">
+            <h2 id="iqtibos-title" className="font-serif text-lg font-semibold">
+              APA / BibTeX
+            </h2>
+            <button
+              type="button"
+              popoverTarget="iqtibos"
+              popoverTargetAction="hide"
+              aria-label={t.close}
+              className="btn btn-ghost -mt-1.5 -mr-2 px-2.5"
+            >
+              <span aria-hidden="true">✕</span>
+            </button>
+          </div>
+          <p className="mt-4 text-sm font-medium">APA</p>
+          <p className="mt-1 rounded-lg border border-line bg-mist p-4 text-sm leading-relaxed">{apaCitation(cite)}</p>
+          <p className="mt-4 text-sm font-medium">BibTeX</p>
+          <pre className="mt-1 overflow-x-auto rounded-lg border border-line bg-mist p-4 text-xs leading-relaxed">
+            {bibtexCitation(cite)}
+          </pre>
+        </div>
+      </div>
 
-      {v.owner.slug && <AboutAuthor owner={v.owner} />}
+      {v.owner.slug && <AboutAuthor owner={v.owner} lang={lang} />}
 
       {v.others.length > 0 && (
         <section className="mt-10">
-          <h2 className="font-serif text-lg font-semibold">Muallifning boshqa maqolalari</h2>
+          <h2 className="font-serif text-lg font-semibold">{t.otherArticles}</h2>
           <ul className="mt-3 space-y-2">
             {v.others.map((o) => (
-              <li key={o.id}>
-                <Link href={`/maqola/${o.id}`} className="link">
-                  {o.title}
+              <li key={o.id} lang={o.titles[lang] ? lang : undefined}>
+                <Link href={localePath(lang, `/maqola/${o.id}`)} className="link">
+                  {o.titles[lang] || o.title}
                 </Link>
               </li>
             ))}
@@ -204,13 +245,16 @@ export function ArticleView({
   );
 }
 
+/** Sahifa tilidagi tarjima bo‘lmasa (eski maqolalar) — asl tili */
+export const shownLang = (v: View, lang: Lang): Lang => (v.titles[lang] ? lang : v.lang);
+
 /** "Konferensiya to‘plami: Proceedings of SPIE 14126, 1412603 (2026) · DOI: 10.1117/12.3110012" */
-function PublicationLine({ p }: { p: NonNullable<View["publication"]> }) {
+function PublicationLine({ p, venues }: { p: NonNullable<View["publication"]>; venues: Record<VenueType, string> }) {
   return (
     <p className="mt-4 text-sm leading-relaxed">
       {p.venue && (
         <>
-          {p.type && <span className="text-muted">{VENUE_LABELS[p.type]}: </span>}
+          {p.type && <span className="text-muted">{venues[p.type]}: </span>}
           <cite className="italic">{p.venue}</cite>
           {venueTail(p)}
           {p.year !== null && ` (${p.year})`}
@@ -229,22 +273,30 @@ function PublicationLine({ p }: { p: NonNullable<View["publication"]> }) {
   );
 }
 
-function AboutAuthor({ owner }: { owner: View["owner"] }) {
-  const credentials = credentialsLine(owner);
+/** Lavozim, kafedra va bio — o‘qituvchi o‘zbekcha yozgan matn (lang="uz"), daraja va yozuvlar sahifa tilida */
+function AboutAuthor({ owner, lang }: { owner: View["owner"]; lang: Lang }) {
+  const t = articleViewText[lang];
+  const credentials = credentialsLine(owner, lang);
   return (
     <aside aria-labelledby="about-author" className="mt-12 rounded-xl border border-line bg-paper p-6">
       <h2 id="about-author" className="font-serif text-lg font-semibold">
-        Muallif haqida
+        {t.aboutAuthor}
       </h2>
       <div className="mt-4 flex flex-col gap-4 sm:flex-row">
         <Avatar src={owner.photoKey ? avatarUrl(owner.photoKey, 512) : null} name={owner.name} size={96} />
         <div className="min-w-0">
           <p className="font-semibold">{owner.name}</p>
           {credentials && <p className="text-sm text-muted">{credentials}</p>}
-          <p className="text-sm text-muted">{[owner.department, owner.institution].filter(Boolean).join(", ")}</p>
-          {owner.bio && <p className="mt-3 text-sm leading-relaxed">{truncate(owner.bio, 300)}</p>}
-          <Link href={`/oqituvchi/${owner.slug}`} className="link mt-3 inline-block text-sm">
-            Profil sahifasi
+          <p lang="uz" className="text-sm text-muted">
+            {[owner.department, owner.institution].filter(Boolean).join(", ")}
+          </p>
+          {owner.bio && (
+            <p lang="uz" className="mt-3 text-sm leading-relaxed">
+              {truncate(owner.bio, 300)}
+            </p>
+          )}
+          <Link href={localePath(lang, `/oqituvchi/${owner.slug}`)} className="link mt-3 inline-block text-sm">
+            {t.profilePage}
           </Link>
         </div>
       </div>

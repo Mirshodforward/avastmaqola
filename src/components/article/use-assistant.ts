@@ -18,7 +18,7 @@ export type ChatMessage = {
 
 export type AssistantHandlers = {
   draft: () => AiDraft;
-  /** Taklifni formaga qo‘llaydi; forma band bo‘lsa (saqlanmoqda, ko‘rinish oynasi ochiq) false */
+  /** Taklifni formaga qo‘llaydi; forma band bo‘lsa (yuborilmoqda, ko‘rinish oynasi ochiq) false */
   apply: (messageId: number, proposal: AiProposal) => boolean;
   /** Forma band bo‘lsa false — taklif qo‘llangan holicha qoladi */
   undo: (messageId: number) => boolean;

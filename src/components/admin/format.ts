@@ -44,6 +44,9 @@ export function formatWait(hours: number): string {
   return hours < 48 ? `${hours} soat` : `${Math.floor(hours / 24)} kun`;
 }
 
+/** Navbatda kutish: yuborilganidan beri o‘tgan to‘liq soatlar (sahifa so‘rov vaqtida chiziladi) */
+export const hoursSince = (value: Date | string) => Math.floor((Date.now() - new Date(value).getTime()) / 3_600_000);
+
 /** "2026-10" → "Okt" yoki "Oktabr 2026" */
 export function monthLabel(key: string, long = false): string {
   const [year, month] = key.split("-").map(Number);

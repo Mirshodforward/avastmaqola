@@ -12,6 +12,7 @@ import {
   formatUsd,
 } from "@/components/admin/format";
 import { Count, TableFrame, numeric, td, th } from "@/components/admin/table";
+import { Chip, type ChipTone } from "@/components/article/status-chip";
 import { DashboardSkeleton } from "@/components/dashboard/shell";
 import { getAiUsage } from "@/server/admin/ai";
 import { requireAdminPage } from "@/server/auth/session";
@@ -19,13 +20,14 @@ import type { AiRequestStatus } from "@/server/db/schema";
 
 export const metadata: Metadata = { title: "Admin: AI so‘rovlar", robots: { index: false } };
 
-const STATUS: Record<AiRequestStatus, { label: string; tone: string }> = {
-  ok: { label: "Muvaffaqiyatli", tone: "border-tile/40 text-tile" },
-  error: { label: "Xato", tone: "border-danger/40 text-danger" },
-  refusal: { label: "Model rad etdi", tone: "border-line text-muted" },
-  truncated: { label: "Javob kesildi", tone: "border-lapis/40 text-lapis" },
-  aborted: { label: "To‘xtatildi", tone: "border-line text-muted" },
-  running: { label: "Jarayonda", tone: "border-lapis/40 text-lapis" },
+// Umumiy to‘rt ohang: muvaffaqiyat — tile, xato va kesilgan javob (taklif qo‘llanmadi) — danger, jarayonda — lapis
+const STATUS: Record<AiRequestStatus, { label: string; tone: ChipTone }> = {
+  ok: { label: "Muvaffaqiyatli", tone: "tile" },
+  error: { label: "Xato", tone: "danger" },
+  refusal: { label: "Model rad etdi", tone: "neutral" },
+  truncated: { label: "Javob kesildi", tone: "danger" },
+  aborted: { label: "To‘xtatildi", tone: "neutral" },
+  running: { label: "Jarayonda", tone: "lapis" },
 };
 
 type Usage = Awaited<ReturnType<typeof getAiUsage>>["totals"]["month"];
@@ -63,14 +65,10 @@ async function AiUsage() {
   ];
 
   return (
-    <AdminShell
-      current="ai"
-      title="AI so‘rovlar"
-      lead="Suhbat matni saqlanmaydi — faqat foydalanish ko‘rsatkichlari: holat, tokenlar, taxminiy narx va davomiylik."
-    >
-      <div className="mt-8 grid gap-x-6 gap-y-10 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-        <Section id="totals-title" title="Jami" note="Toshkent vaqti bilan; 7 va 30 kun — bugun bilan birga.">
-          <TableFrame label="AI so‘rovlar: jami ko‘rsatkichlar" minWidth="min-w-[26rem]">
+    <AdminShell current="ai" title="AI so‘rovlar">
+      <div className="mt-8 grid gap-x-12 gap-y-12 xl:grid-cols-2">
+        <Section id="totals-title" title="Jami">
+          <TableFrame label="AI so‘rovlar: jami ko‘rsatkichlar" minWidth="min-w-[24rem]">
             <thead>
               <tr>
                 <th scope="col" className={th}>
@@ -88,12 +86,12 @@ async function AiUsage() {
                 <tr key={row.label}>
                   <th
                     scope="row"
-                    className={`whitespace-nowrap border-b border-line py-2 pr-4 text-left font-normal ${row.sub ? "pl-8 text-muted" : "pl-4"}`}
+                    className={`whitespace-nowrap border-b border-line py-2 pr-3 text-left font-normal ${row.sub ? "pl-7 text-muted" : "pl-3"}`}
                   >
                     {row.label}
                   </th>
                   {windows.map((w) => (
-                    <td key={w.key} className={`border-b border-line px-4 py-2 ${numeric}`}>
+                    <td key={w.key} className={`border-b border-line px-3 py-2 ${numeric}`}>
                       {row.value(w.usage)}
                     </td>
                   ))}
@@ -103,28 +101,17 @@ async function AiUsage() {
           </TableFrame>
         </Section>
 
-        <Section
-          id="daily-title"
-          title="Kunlik so‘rovlar"
-          note={`So‘nggi 30 kun: ${formatNumber(totals.month.requests)} ta so‘rov`}
-        >
-          <div className="mt-4 rounded-xl border border-line bg-paper p-5">
-            <BarChart
-              series={["So‘rovlar"]}
-              points={daily.map((d) => ({ key: d.day, label: dayLabel(d.day), title: dayLabel(d.day), values: [d.requests] }))}
-              tableLabel="AI so‘rovlar kunlar bo‘yicha"
-              labelEvery={5}
-            />
-          </div>
+        <Section id="daily-title" title="Kunlik so‘rovlar, 30 kun">
+          <BarChart
+            series={["So‘rovlar"]}
+            points={daily.map((d) => ({ key: d.day, label: dayLabel(d.day), title: dayLabel(d.day), values: [d.requests] }))}
+            tableLabel="AI so‘rovlar kunlar bo‘yicha"
+            labelEvery={5}
+          />
         </Section>
       </div>
 
-      <Section
-        id="top-title"
-        title="Eng faol o‘qituvchilar"
-        note="So‘nggi 30 kun, so‘rovlar soni bo‘yicha"
-        className="mt-10 max-w-4xl"
-      >
+      <Section id="top-title" title="Eng faol o‘qituvchilar, 30 kun" className="mt-12 max-w-4xl">
         {top.length ? (
           <TableFrame label="Eng faol o‘qituvchilar" minWidth="min-w-[36rem]">
             <thead>
@@ -165,7 +152,7 @@ async function AiUsage() {
         )}
       </Section>
 
-      <Section id="latest-title" title="So‘nggi so‘rovlar" note="Oxirgi 50 ta, yangilari birinchi" className="mt-10">
+      <Section id="latest-title" title="So‘nggi so‘rovlar" className="mt-12">
         {latest.length ? (
           <TableFrame label="So‘nggi AI so‘rovlar" minWidth="min-w-[72rem]">
             <thead>
@@ -194,7 +181,8 @@ async function AiUsage() {
                     {r.articleId === null ? (
                       <span className="text-muted">—</span>
                     ) : r.articleStatus && r.articleStatus !== "draft" ? (
-                      <Link href={`/admin/articles/${r.articleId}`} className="link">
+                      // Ko‘rib chiqish paneli «Maqolalar» ro‘yxati ustida ochiladi
+                      <Link href={`/admin/articles?view=${r.articleId}`} className="link">
                         №{r.articleId}
                       </Link>
                     ) : (
@@ -205,11 +193,7 @@ async function AiUsage() {
                     )}
                   </td>
                   <td className={td}>
-                    <span
-                      className={`inline-flex whitespace-nowrap rounded-full border bg-paper px-2.5 py-0.5 text-xs font-medium ${STATUS[r.status].tone}`}
-                    >
-                      {STATUS[r.status].label}
-                    </span>
+                    <Chip tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Chip>
                     <span className="mt-1 block whitespace-nowrap text-xs text-muted">
                       {r.model}
                       {r.withPdf && " · PDF bilan"}
@@ -237,30 +221,17 @@ async function AiUsage() {
   );
 }
 
-function Section({
-  id,
-  title,
-  note,
-  className = "",
-  children,
-}: {
-  id: string;
-  title: string;
-  note: string;
-  className?: string;
-  children: ReactNode;
-}) {
+function Section({ id, title, className = "", children }: { id: string; title: string; className?: string; children: ReactNode }) {
   return (
     <section aria-labelledby={id} className={`min-w-0 ${className}`}>
       <h2 id={id} className="font-serif text-xl font-semibold">
         {title}
       </h2>
-      <p className="mt-1 text-sm text-muted">{note}</p>
       {children}
     </section>
   );
 }
 
 function Empty({ children }: { children: ReactNode }) {
-  return <p className="mt-4 rounded-xl border border-line bg-paper p-5 text-muted">{children}</p>;
+  return <p className="mt-4 text-muted">{children}</p>;
 }

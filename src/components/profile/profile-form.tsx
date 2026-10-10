@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, type ChangeEvent, type FormEvent } from "react";
 import { Field } from "@/components/auth/field";
 import { sendJson } from "@/lib/api-client";
@@ -41,6 +42,7 @@ export function ProfileForm({
   const [formError, setFormError] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [slug, setSlug] = useState(initialSlug);
+  const router = useRouter();
 
   function update(key: keyof ProfileFormValues, value: string) {
     setValues((v) => ({ ...v, [key]: value }));
@@ -64,6 +66,7 @@ export function ProfileForm({
     if (res.ok) {
       setSlug(res.slug);
       setStatus("saved");
+      router.refresh(); // kabinet header’idagi ism ham yangilansin (forma holati saqlanadi)
       return;
     }
     setStatus("idle");
@@ -80,11 +83,14 @@ export function ProfileForm({
   return (
     <form noValidate onSubmit={onSubmit} className="mt-8 space-y-6">
       {/* Saqlash (ORCID tekshiruvi bir necha soniya) davomida maydonlar qulflanadi: shu orada yozilgani "Saqlandi" deb ko‘rsatilmasin */}
-      <fieldset disabled={status === "saving"} className="m-0 min-w-0 space-y-6 border-0 p-0">
+      <fieldset
+        disabled={status === "saving"}
+        className="m-0 min-w-0 space-y-8 rounded-xl border border-line bg-paper p-5 sm:p-8"
+      >
         {/* Rasm va ism bir qatorda: keng ekranda yonma-yon, tor ekranda ustma-ust */}
-        <div className="grid gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]">
+        <div className="grid gap-8 lg:grid-cols-[12rem_minmax(0,1fr)]">
           <PhotoField initialUrl={photoUrl} enabled={slug !== null} name={`${values.firstName} ${values.lastName}`} />
-          <Section title="Ism" description="Ism va familiya maqola sahifalarida muallif sifatida ko‘rinadi.">
+          <Section title="Ism" ruled={false}>
             <Field label="Ism *" autoComplete="given-name" {...bind("firstName")} />
             <Field label="Familiya *" autoComplete="family-name" {...bind("lastName")} />
             <Field label="Otasining ismi" {...bind("patronymic")} />
@@ -128,10 +134,7 @@ export function ProfileForm({
           </div>
         </Section>
 
-        <Section
-          title="Identifikatorlar va havolalar"
-          description="Qidiruv tizimlari va AI shu havolalar orqali boshqa platformalardagi profillaringizni sizga bog‘laydi."
-        >
+        <Section title="Identifikatorlar va havolalar">
           <Field label="ORCID iD" placeholder="0000-0000-0000-0000" spellCheck={false} {...bind("orcid")} />
           <Field label="Scopus Author ID" inputMode="numeric" {...bind("scopusAuthorId")} />
           <div className="sm:col-span-2">

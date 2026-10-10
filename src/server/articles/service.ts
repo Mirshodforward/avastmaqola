@@ -51,6 +51,39 @@ export async function createDraft(userId: string): Promise<number> {
   return db.transaction(async (tx) => {
     // Bir akkauntning parallel so‘rovlari navbatma-navbat: hammasi "10 dan kam" ko‘rib chegarani oshirib ketmasin
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${userId}, 0))`);
+
+    // Hech narsa yozilmagan qoralama bo‘lsa, o‘sha ochiladi: «Yangi maqola»ni qayta bosish ro‘yxatni
+    // «Sarlavhasiz maqola»lar bilan to‘ldirmasin (va chegarani band qilmasin)
+    const blank = (column: unknown) => sql`btrim(coalesce(${column}, '')) = ''`;
+    const [empty] = await tx
+      .select({ id: articles.id })
+      .from(articles)
+      .where(
+        and(
+          eq(articles.userId, userId),
+          eq(articles.status, "draft"),
+          isNull(articles.pdfKey),
+          isNull(articles.venue),
+          isNull(articles.doi),
+          blank(articles.titleUz),
+          blank(articles.titleRu),
+          blank(articles.titleEn),
+          blank(articles.abstractUz),
+          blank(articles.abstractRu),
+          blank(articles.abstractEn),
+          sql`cardinality(${articles.keywordsUz}) + cardinality(${articles.keywordsRu}) + cardinality(${articles.keywordsEn}) = 0`,
+          // Hammualliflar qo‘shilgan bo‘lsa — bu allaqachon boshlangan ish
+          sql`(select count(*) from ${articleAuthors} where ${articleAuthors.articleId} = ${articles.id}) <= 1`,
+        ),
+      )
+      .orderBy(desc(articles.updatedAt))
+      .limit(1);
+    if (empty) {
+      // Kabinetdagi «So‘nggi maqolalar» tepasiga chiqadi
+      await tx.update(articles).set({ updatedAt: sql`now()` }).where(eq(articles.id, empty.id));
+      return empty.id;
+    }
+
     const [{ open }] = await tx
       .select({ open: sql<number>`count(*)::int` })
       .from(articles)

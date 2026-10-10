@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef } from "react";
 import type { Problem } from "@/lib/article-rules";
 import type { ArticleView as View } from "@/server/articles/view";
+import { CloseIcon } from "./ai-panel";
 import { ArticleView } from "./article-view";
 import { IssueFields, type IssueValues } from "./issue-fields";
 
@@ -57,14 +58,11 @@ export function ArticlePreview({
       {open && (
         <div className="flex h-full flex-col">
           <div className="flex items-center gap-3 border-b border-line px-5 py-3">
-            <div className="min-w-0 flex-1">
-              <h2 id="preview-title" className="font-serif text-lg font-semibold">
-                Maqola sahifasi shunday ko‘rinadi
-              </h2>
-              <p className="text-sm text-muted">Universitet tasdiqlagach, sahifa shu ko‘rinishda ommaga ochiladi.</p>
-            </div>
+            <h2 id="preview-title" className="min-w-0 flex-1 font-serif text-lg font-semibold">
+              Maqola sahifasi shunday ko‘rinadi
+            </h2>
             <button type="button" className="btn btn-ghost px-2.5" onClick={onClose} aria-label="Ko‘rinishni yopish">
-              <span aria-hidden="true">✕</span>
+              <CloseIcon />
             </button>
           </div>
 
@@ -95,9 +93,7 @@ export function ArticlePreview({
             ) : aiBusy ? (
               <p className="text-sm text-muted">AI hali javob yozmoqda — tugashini kuting.</p>
             ) : (
-              <p className="text-sm text-tile">
-                Yuborish bilan maqolani ochiq joylashga huquqingiz borligini tasdiqlaysiz. Maqola universitetga ko‘rib chiqishga ketadi.
-              </p>
+              <p className="text-sm">Yuborish bilan maqolani ochiq joylashga huquqingiz borligini tasdiqlaysiz.</p>
             )}
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <IssueFields value={issue} onChange={onIssueChange} />

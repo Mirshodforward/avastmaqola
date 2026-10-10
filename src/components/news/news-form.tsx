@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import { Chip } from "@/components/article/status-chip";
 import { Field } from "@/components/auth/field";
 import { TextAreaField } from "@/components/profile/controls";
 import { sendForm, sendJson } from "@/lib/api-client";
@@ -109,11 +110,7 @@ export function NewsForm({
   return (
     <div className="mt-6 max-w-3xl space-y-6">
       <p className="flex flex-wrap items-center gap-3 text-sm">
-        <span
-          className={`rounded-full px-2.5 py-0.5 font-medium ${published ? "bg-tile-soft text-tile" : "border border-line text-muted"}`}
-        >
-          {published ? "Chop etilgan" : "Qoralama"}
-        </span>
+        <Chip tone={published ? "tile" : "neutral"}>{published ? "Chop etilgan" : "Qoralama"}</Chip>
         {/* Oddiy <a>: router keshidagi eski nusxa emas, yangi sahifa ochilsin */}
         {published && (
           <a href={`/yangiliklar/${id}`} className="link">
@@ -124,9 +121,9 @@ export function NewsForm({
 
       {/* Saqlash paytida matn qulflanadi: shu orada yozilgani "Saqlandi" deb ko‘rsatilmasin. Rasm alohida so‘rov —
           yuklash paytida matnni yozishda davom etish mumkin, rasm tugmalari esa fokusni yo‘qotmasligi uchun aria-disabled */}
-      <fieldset disabled={locked} className="m-0 min-w-0 border-0 p-0">
+      <fieldset disabled={locked} className="min-w-0 border-0 p-0">
         <Field
-          label="Sarlavha *"
+          label="Sarlavha"
           name="title"
           value={values.title}
           error={errors.title}
@@ -137,21 +134,19 @@ export function NewsForm({
 
       <div>
         <p className="text-sm font-medium">Rasm</p>
-        <div className="mt-1.5 overflow-hidden rounded-xl border border-line bg-mist">
-          {imageUrl ? (
-            <Image
-              src={imageUrl}
-              alt=""
-              width={1200}
-              height={675}
-              unoptimized // 1200×675 WebP yuklashda tayyorlangan
-              className="aspect-video w-full object-cover"
-            />
-          ) : (
-            <div className="grid aspect-video place-items-center text-sm text-muted">Rasm yo‘q</div>
-          )}
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2">
+        {/* Rasm bo‘lmasa bo‘sh quti chizilmaydi (u matn maydoni va yuklash tugmasini ekrandan pastga surardi);
+            rasm bo‘lsa — o‘rtacha kattalikdagi ko‘rinish */}
+        {imageUrl && (
+          <Image
+            src={imageUrl}
+            alt=""
+            width={1200}
+            height={675}
+            unoptimized // 1200×675 WebP yuklashda tayyorlangan
+            className="mt-1.5 aspect-video w-full max-w-sm rounded-xl border border-line object-cover"
+          />
+        )}
+        <div className={`${imageUrl ? "mt-3" : "mt-1.5"} flex flex-wrap gap-2`}>
           <button
             type="button"
             className="btn btn-secondary"
@@ -184,9 +179,9 @@ export function NewsForm({
         )}
       </div>
 
-      <fieldset disabled={locked} className="m-0 min-w-0 border-0 p-0">
+      <fieldset disabled={locked} className="min-w-0 border-0 p-0">
         <TextAreaField
-          label="Matn *"
+          label="Matn"
           name="body"
           value={values.body}
           error={errors.body}
@@ -209,14 +204,15 @@ export function NewsForm({
             Chop etish
           </button>
         )}
-        <button type="button" className="btn btn-ghost text-danger" aria-disabled={busy !== null} onClick={remove}>
-          O‘chirish
-        </button>
         {notice && (
           <p role={notice.ok ? "status" : "alert"} className={`text-sm ${notice.ok ? "font-medium text-tile" : "text-danger"}`}>
             {notice.text}
           </p>
         )}
+        {/* O‘chirish — qaytarib bo‘lmaydigan amal: «Chop etish»dan uzoqda, o‘ng chetda */}
+        <button type="button" className="btn btn-ghost ml-auto text-danger" aria-disabled={busy !== null} onClick={remove}>
+          O‘chirish
+        </button>
       </div>
     </div>
   );

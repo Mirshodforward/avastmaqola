@@ -1,0 +1,171 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-10T12:00:00+05:00",
+  "title": "Design System: Asman Universiteti ilmiy maqolalari (Avtomaqola)",
+  "extensions": {
+    "colorMeta": {
+      "lapis": { "role": "primary", "displayName": "Lojuvard Lapis", "canonical": "#1f3c8f", "dark": "#8fb0ff", "tonalRamp": ["#0c1838", "#132656", "#1a3374", "#1f3c8f", "#4361b0", "#7a92cc", "#b7c5e6", "#e7ecf7"] },
+      "lapis-deep": { "role": "primary", "displayName": "Deep Lapis", "canonical": "#172d6c", "dark": "#b8ccff", "tonalRamp": ["#0a1430", "#10204c", "#172d6c", "#22408f", "#4a63ab", "#7f93c8", "#b8c4e4", "#e6ebf6"] },
+      "on-lapis": { "role": "primary", "displayName": "On Lapis", "canonical": "#ffffff", "dark": "#0d1424", "tonalRamp": ["#1f2633", "#3a4250", "#5a6270", "#7d8491", "#a2a8b3", "#c6cbd3", "#e6e9ee", "#ffffff"] },
+      "tile": { "role": "secondary", "displayName": "Firuza Tile", "canonical": "#0f7b83", "dark": "#4fc2c0", "tonalRamp": ["#052e31", "#08474c", "#0b6168", "#0f7b83", "#3d9aa1", "#79bcc0", "#b5dcde", "#e3f3f2"] },
+      "tile-soft": { "role": "secondary", "displayName": "Tile Wash", "canonical": "#e3f3f2", "dark": "#12302f", "tonalRamp": ["#052e31", "#08474c", "#0b6168", "#0f7b83", "#3d9aa1", "#79bcc0", "#b5dcde", "#e3f3f2"] },
+      "mist": { "role": "neutral", "displayName": "Mist Ground", "canonical": "#f1f4f9", "dark": "#0d1424", "tonalRamp": ["#0d1424", "#15213b", "#2c3850", "#5a6478", "#7d889b", "#a9b3c3", "#d6dde8", "#f1f4f9"] },
+      "paper": { "role": "neutral", "displayName": "Paper", "canonical": "#ffffff", "dark": "#141d31", "tonalRamp": ["#141d31", "#2a3650", "#5a6478", "#7d889b", "#a9b3c3", "#d6dde8", "#f1f4f9", "#ffffff"] },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "#15213b", "dark": "#e6ebf5", "tonalRamp": ["#0b1222", "#15213b", "#2c3850", "#5a6478", "#7d889b", "#a9b3c3", "#d6dde8", "#f1f4f9"] },
+      "muted": { "role": "neutral", "displayName": "Muted Slate", "canonical": "#5a6478", "dark": "#9aa6bd", "tonalRamp": ["#0b1222", "#15213b", "#2c3850", "#5a6478", "#7d889b", "#a9b3c3", "#d6dde8", "#f1f4f9"] },
+      "line": { "role": "neutral", "displayName": "Hairline", "canonical": "#d6dde8", "dark": "#2a3650", "tonalRamp": ["#0b1222", "#15213b", "#2c3850", "#5a6478", "#7d889b", "#a9b3c3", "#d6dde8", "#f1f4f9"] },
+      "input-border": { "role": "neutral", "displayName": "Field Edge", "canonical": "#7d889b", "dark": "#5d6b87", "tonalRamp": ["#0b1222", "#15213b", "#2c3850", "#5a6478", "#7d889b", "#a9b3c3", "#d6dde8", "#f1f4f9"] },
+      "danger": { "role": "state", "displayName": "Danger", "canonical": "#b42318", "dark": "#ff8a80", "tonalRamp": ["#3d0c08", "#6a150e", "#911c13", "#b42318", "#d0564c", "#e38b84", "#f1c0bb", "#fdecea"] },
+      "danger-soft": { "role": "state", "displayName": "Danger Wash", "canonical": "#fdecea", "dark": "#3a1714", "tonalRamp": ["#3d0c08", "#6a150e", "#911c13", "#b42318", "#d0564c", "#e38b84", "#f1c0bb", "#fdecea"] },
+      "telegram": { "role": "brand-mark", "displayName": "Telegram", "canonical": "#1a73a8", "hover": "#155f8b", "tonalRamp": ["#0a2c41", "#104766", "#155f8b", "#1a73a8", "#4b93c0", "#82b5d6", "#bad6ea", "#e8f2f9"] },
+      "orcid": { "role": "brand-mark", "displayName": "ORCID Green", "canonical": "#a6ce39", "tonalRamp": ["#2c3810", "#46591a", "#627d24", "#83a52f", "#a6ce39", "#bfdc6f", "#d8eaa6", "#f1f8dc"] },
+      "logo-navy": { "role": "brand-mark", "displayName": "Asman Navy", "canonical": "#0b1d3a", "dark": "var(--ink)", "tonalRamp": ["#0b1d3a", "#142c54", "#203d6e", "#3a5888", "#6079a3", "#8d9fc0", "#bfcadd", "#eaeef5"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "The landing hero h1 only." },
+      "headline": { "displayName": "Headline", "purpose": "Every page h1; 1.875rem below 640px, 2.25rem from 640px. Also the landing section h2s." },
+      "title": { "displayName": "Title", "purpose": "Section h2s on cabinet and staff pages, drawer and dialog titles; panel and article-page sections step down to 1.125rem." },
+      "card-title": { "displayName": "Card title", "purpose": "Article, author and news titles in cards and lists; the brand name." },
+      "numeral": { "displayName": "Numeral", "purpose": "Stat values; 1.25rem for secondary stats." },
+      "body": { "displayName": "Body", "purpose": "UI text and all inputs (16px, no iOS zoom)." },
+      "lead": { "displayName": "Lead", "purpose": "Page leads and long reading text, capped at 34em." },
+      "button": { "displayName": "Button", "purpose": "All .btn labels and header nav." },
+      "label": { "displayName": "Label", "purpose": "Meta lines, form labels, table cells, helper and error text, menu rows." },
+      "caption": { "displayName": "Caption", "purpose": "Status chips, table headers, footer copyright." }
+    },
+    "shadows": [
+      { "name": "floating-menu", "value": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)", "purpose": "The header menu, language menu and user menu (Tailwind shadow-lg)." },
+      { "name": "tooltip", "value": "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)", "purpose": "Admin bar-chart tooltip (Tailwind shadow-md)." },
+      { "name": "input-focus-halo", "value": "0 0 0 3px color-mix(in oklab, var(--tile) 25%, transparent)", "purpose": "Focused input, with the tile border." },
+      { "name": "scrim", "value": "color-mix(in oklab, var(--ink) 50%, transparent)", "purpose": "Modal dialog backdrop (admin article drawer uses 40%)." }
+    ],
+    "motion": [
+      { "name": "control-transition", "value": "background-color 0.15s, border-color 0.15s, color 0.15s", "purpose": "Buttons, cards, pills and nav on every surface." },
+      { "name": "ease-horizon", "value": "cubic-bezier(0.2, 0.7, 0.2, 1)", "purpose": "Landing-only load and scroll reveals (frozen); reduced-motion gated." },
+      { "name": "loading-pulse", "value": "animate-pulse", "purpose": "Skeletons and in-progress indicators; disabled under reduced motion." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" },
+      { "name": "2xl", "value": "1536px" }
+    ],
+    "container": { "name": "PUBLIC_WIDTH", "value": "margin-inline:auto; width:90% (70% from 1280px, 60% from 1536px)", "purpose": "Header, content and footer of every surface; editor uses the full-width 'wide' frame." },
+    "theming": { "mechanism": "<html data-theme=\"light|dark\"> set before paint from localStorage 'theme' or prefers-color-scheme; tokens redefined under :root[data-theme=dark]." }
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single main action of a view.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Yangi maqola</button>",
+      "css": ".ds-btn { display:inline-flex; align-items:center; justify-content:center; gap:0.5rem; border:1px solid transparent; border-radius:0.5rem; padding:0.625rem 1rem; font-family:Onest, system-ui, sans-serif; font-size:0.9375rem; font-weight:500; line-height:1.25rem; cursor:pointer; transition:background-color .15s, border-color .15s, color .15s; } .ds-btn-primary { background:var(--lapis, #1f3c8f); color:var(--on-lapis, #fff); } .ds-btn-primary:hover { background:var(--lapis-deep, #172d6c); } .ds-btn:focus-visible { outline:2px solid var(--tile, #0f7b83); outline-offset:2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Paper button with a hairline border: Kirish, pagination, drawer close.",
+      "html": "<button class=\"ds-btn ds-btn-secondary\">Kirish</button>",
+      "css": ".ds-btn { display:inline-flex; align-items:center; justify-content:center; gap:0.5rem; border:1px solid transparent; border-radius:0.5rem; padding:0.625rem 1rem; font-family:Onest, system-ui, sans-serif; font-size:0.9375rem; font-weight:500; line-height:1.25rem; cursor:pointer; transition:background-color .15s, border-color .15s, color .15s; } .ds-btn-secondary { background:var(--paper, #fff); border-color:var(--line, #d6dde8); color:var(--ink, #15213b); } .ds-btn-secondary:hover { border-color:var(--muted, #5a6478); } .ds-btn:focus-visible { outline:2px solid var(--tile, #0f7b83); outline-offset:2px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Header nav links and icon buttons; active nav gets mist and semibold.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-btn ds-btn-ghost\" aria-current=\"page\" href=\"#\">Maqolalar</a><a class=\"ds-btn ds-btn-ghost\" href=\"#\">Mualliflar</a><a class=\"ds-btn ds-btn-ghost\" href=\"#\">Yo‘nalishlar</a></nav>",
+      "css": ".ds-nav { display:flex; gap:0.125rem; } .ds-btn { display:inline-flex; align-items:center; border:1px solid transparent; border-radius:0.5rem; padding:0.625rem 0.5rem; font-family:Onest, system-ui, sans-serif; font-size:0.9375rem; font-weight:500; line-height:1.25rem; text-decoration:none; transition:background-color .15s, color .15s; } .ds-btn-ghost { color:var(--ink, #15213b); background:transparent; } .ds-btn-ghost:hover { background:color-mix(in oklab, var(--ink, #15213b) 7%, transparent); } .ds-btn-ghost[aria-current=page] { background:var(--mist, #f1f4f9); font-weight:600; } .ds-btn:focus-visible { outline:2px solid var(--tile, #0f7b83); outline-offset:2px; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "16px field with a 3:1 edge; tile border and halo on focus.",
+      "html": "<label class=\"ds-field\"><span>Sarlavha</span><input class=\"ds-input\" value=\"Ilmiy maqola\"></label>",
+      "css": ".ds-field { display:grid; gap:0.375rem; font-family:Onest, system-ui, sans-serif; font-size:0.875rem; font-weight:500; color:var(--ink, #15213b); } .ds-input { width:100%; border:1px solid var(--input-border, #7d889b); border-radius:0.5rem; background:var(--paper, #fff); color:var(--ink, #15213b); padding:0.625rem 0.75rem; font:inherit; font-size:1rem; font-weight:400; } .ds-input:focus { outline:none; border-color:var(--tile, #0f7b83); box-shadow:0 0 0 3px color-mix(in oklab, var(--tile, #0f7b83) 25%, transparent); }"
+    },
+    {
+      "name": "Status Chips",
+      "kind": "chip",
+      "refersTo": "chip-status",
+      "description": "One chip shape, four tones, always with text.",
+      "html": "<div class=\"ds-chips\"><span class=\"ds-chip ds-neutral\">Qoralama</span><span class=\"ds-chip ds-lapis\">Ko‘rib chiqilmoqda</span><span class=\"ds-chip ds-tile\">Chop etilgan</span><span class=\"ds-chip ds-danger\">Qaytarilgan</span></div>",
+      "css": ".ds-chips { display:flex; gap:0.5rem; flex-wrap:wrap; } .ds-chip { display:inline-flex; align-items:center; white-space:nowrap; border:1px solid; border-radius:9999px; background:var(--paper, #fff); padding:0.125rem 0.625rem; font-family:Onest, system-ui, sans-serif; font-size:0.75rem; line-height:1rem; font-weight:500; } .ds-neutral { border-color:var(--line, #d6dde8); color:var(--muted, #5a6478); } .ds-lapis { border-color:color-mix(in oklab, var(--lapis, #1f3c8f) 40%, transparent); color:var(--lapis, #1f3c8f); } .ds-tile { border-color:color-mix(in oklab, var(--tile, #0f7b83) 40%, transparent); color:var(--tile, #0f7b83); } .ds-danger { border-color:color-mix(in oklab, var(--danger, #b42318) 40%, transparent); color:var(--danger, #b42318); }"
+    },
+    {
+      "name": "Filter Pills",
+      "kind": "chip",
+      "refersTo": "filter-pill",
+      "description": "Status filters with counts; active is filled lapis with aria-current=true.",
+      "html": "<nav class=\"ds-pills\"><a class=\"ds-pill\" aria-current=\"true\" href=\"#\">Hammasi <span>12</span></a><a class=\"ds-pill\" href=\"#\">Qoralama <span>3</span></a><a class=\"ds-pill\" href=\"#\">Chop etilgan <span>9</span></a></nav>",
+      "css": ".ds-pills { display:flex; flex-wrap:wrap; gap:0.5rem; } .ds-pill { display:inline-flex; align-items:center; gap:0.5rem; border:1px solid var(--line, #d6dde8); border-radius:9999px; background:var(--paper, #fff); color:var(--ink, #15213b); padding:0.5rem 1rem; font-family:Onest, system-ui, sans-serif; font-size:0.875rem; font-weight:500; text-decoration:none; transition:border-color .15s; } .ds-pill span { color:var(--muted, #5a6478); font-variant-numeric:tabular-nums; } .ds-pill:hover { border-color:var(--lapis, #1f3c8f); } .ds-pill[aria-current=true] { background:var(--lapis, #1f3c8f); border-color:var(--lapis, #1f3c8f); color:var(--on-lapis, #fff); } .ds-pill[aria-current=true] span { color:inherit; } .ds-pill:focus-visible { outline:2px solid var(--tile, #0f7b83); outline-offset:2px; }"
+    },
+    {
+      "name": "Article Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Clickable card: mist issue panel, serif title stretched over the card, card-level focus ring.",
+      "html": "<article class=\"ds-card\"><div class=\"ds-card-side\"><p class=\"ds-issue\">3-son</p><p class=\"ds-seq\">12-maqola</p></div><div class=\"ds-card-body\"><time class=\"ds-meta\">10-oktabr, 2026</time><h3 class=\"ds-card-title\"><a href=\"#\">Raqamli ta’limda baholash usullari</a></h3><p class=\"ds-meta\">A. Karimov, D. Yusupova</p></div></article>",
+      "css": ".ds-card { position:relative; display:flex; overflow:hidden; max-width:36rem; border:1px solid var(--line, #d6dde8); border-radius:0.75rem; background:var(--paper, #fff); color:var(--ink, #15213b); transition:border-color .15s; font-family:Onest, system-ui, sans-serif; } .ds-card:hover { border-color:color-mix(in oklab, var(--lapis, #1f3c8f) 50%, transparent); } .ds-card:has(a:focus-visible) { outline:2px solid var(--tile, #0f7b83); outline-offset:2px; } .ds-card-side { display:flex; flex-direction:column; justify-content:space-between; gap:0.5rem; width:8rem; flex-shrink:0; border-right:1px solid var(--line, #d6dde8); background:var(--mist, #f1f4f9); padding:1rem; } .ds-issue { margin:0; font-size:0.75rem; color:var(--muted, #5a6478); } .ds-seq { margin:0; font-family:Literata, Georgia, serif; font-weight:600; color:var(--lapis, #1f3c8f); font-variant-numeric:tabular-nums; } .ds-card-body { padding:1.25rem; min-width:0; } .ds-meta { display:block; margin:0.5rem 0 0; font-size:0.875rem; color:var(--muted, #5a6478); } time.ds-meta { margin:0; } .ds-card-title { margin:0.25rem 0 0; font-family:Literata, Georgia, serif; font-size:1.125rem; line-height:1.375; font-weight:600; } .ds-card-title a { color:inherit; text-decoration:none; outline:none; } .ds-card-title a::after { content:''; position:absolute; inset:0; } .ds-card:hover .ds-card-title a { color:var(--lapis, #1f3c8f); }"
+    },
+    {
+      "name": "Row List",
+      "kind": "custom",
+      "refersTo": "row-list",
+      "description": "Unboxed list between hairlines: Maqolalarim, review queue, moderator.",
+      "html": "<ul class=\"ds-rows\"><li><a href=\"#\">Raqamli ta’limda baholash usullari</a><span class=\"ds-chip\">Ko‘rib chiqilmoqda</span><span class=\"ds-date\">10.10.2026</span></li><li><a href=\"#\">Til korpuslari va izohli lug‘atlar</a><span class=\"ds-chip ds-ok\">Chop etilgan</span><span class=\"ds-date\">02.10.2026</span></li></ul>",
+      "css": ".ds-rows { list-style:none; margin:0; padding:0; border-block:1px solid var(--line, #d6dde8); font-family:Onest, system-ui, sans-serif; color:var(--ink, #15213b); } .ds-rows li { display:grid; grid-template-columns:1fr auto 8.5rem; align-items:baseline; column-gap:1.5rem; padding:1rem 0; } .ds-rows li + li { border-top:1px solid var(--line, #d6dde8); } .ds-rows a { font-weight:500; color:inherit; text-decoration:none; transition:color .15s; } .ds-rows a:hover { color:var(--lapis, #1f3c8f); } .ds-rows a:focus-visible { outline:2px solid var(--tile, #0f7b83); outline-offset:2px; } .ds-chip { border:1px solid color-mix(in oklab, var(--lapis, #1f3c8f) 40%, transparent); border-radius:9999px; padding:0.125rem 0.625rem; font-size:0.75rem; font-weight:500; color:var(--lapis, #1f3c8f); white-space:nowrap; } .ds-ok { border-color:color-mix(in oklab, var(--tile, #0f7b83) 40%, transparent); color:var(--tile, #0f7b83); } .ds-date { text-align:right; font-size:0.875rem; color:var(--muted, #5a6478); font-variant-numeric:tabular-nums; }"
+    },
+    {
+      "name": "Admin Tabs",
+      "kind": "nav",
+      "refersTo": "admin-tabs",
+      "description": "Second-row underline tabs inside staff pages (admin area still being edited).",
+      "html": "<nav><ul class=\"ds-tabs\"><li><a href=\"#\">Umumiy</a></li><li><a href=\"#\" aria-current=\"page\">Navbat</a></li><li><a href=\"#\">Maqolalar</a></li><li><a href=\"#\">Iqtiboslar</a></li></ul></nav>",
+      "css": ".ds-tabs { display:flex; flex-wrap:wrap; list-style:none; margin:0; padding:0; font-family:Onest, system-ui, sans-serif; font-size:0.875rem; } .ds-tabs li { flex-grow:1; border-bottom:1px solid var(--line, #d6dde8); } .ds-tabs a { display:block; margin-bottom:-1px; border-bottom:2px solid transparent; padding:0.625rem 0.75rem; text-align:center; font-weight:500; color:var(--muted, #5a6478); text-decoration:none; transition:color .15s; } .ds-tabs a:hover { color:var(--ink, #15213b); } .ds-tabs a[aria-current=page] { border-color:var(--lapis, #1f3c8f); color:var(--ink, #15213b); } .ds-tabs a:focus-visible { outline:2px solid var(--tile, #0f7b83); outline-offset:-2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The University Notice Board, Ruled in Lapis",
+    "overview": "The portal reads like a well-kept academic register: paper cards on a cool mist ground, one lapis voice for every action and every emphasis numeral, serif headings that give scholarly weight, and a plain sans for everything the user has to operate. Density is moderate and calm. Structure comes from 1px hairlines and generous whitespace, not from fills, shadows or colour. The palette's names come from Samarkand tilework: lojuvard (lapis) for the brand and turquoise tile (firuza) for focus and success.\n\nThe home landing (`src/app/page.tsx`, `src/components/home/**`) is the reference grammar and is frozen. It alone carries atmosphere: the sky gradient, the tile horizon line, the rising and floating logo, the blurred sticky header and scroll-driven reveal motion. Every other surface (public pages, \"Kabinet\", \"Moderator paneli\", \"Admin panel\", auth, 404) speaks the landing's grammar without its decoration: same header, same width, same card, same buttons. The owner's taste is minimal text and no excess decoration (gradients, glow, many colours); the ratings block (\"Iqtiboslar\") was rebuilt to that taste and now sits inside the article column as a plain list.\n\nBoth themes are first-class. `<html data-theme>` is set before paint from the saved choice or the system preference; every token has a dark value, and the official logo switches from its navy to `ink` in dark mode.",
+    "keyCharacteristics": [
+      "One accent: lapis for actions, links, current state and emphasis numerals; tile only for focus, success and landing decoration.",
+      "Literata for headings, card titles and numerals; Onest for body, UI, buttons, labels and chips.",
+      "Borders, not shadows: hairline `line` edges on paper; shadows only on floating menus and the chart tooltip.",
+      "One width (`PUBLIC_WIDTH`) and one header grammar across public and signed-in surfaces.",
+      "Status is always text plus tone, never colour alone.",
+      "Motion is feedback only outside the frozen landing."
+    ],
+    "rules": [
+      { "name": "The One Voice Rule", "body": "Lapis is the only accent. Any other hue on a screen must mean a state (success, danger) or a third-party mark (Telegram, ORCID). No new decorative colours.", "section": "colors" },
+      { "name": "The Tile Is Not a Highlight Rule", "body": "Tile signals focus and success. It does not decorate app surfaces; its decorative uses (sky glow, horizon line) belong to the frozen landing.", "section": "colors" },
+      { "name": "The Serif Names, Sans Operates Rule", "body": "Literata is for headings, titles and numbers; never for buttons, labels, chips or form text.", "section": "typography" },
+      { "name": "The Title Is the Largest Rule", "body": "On public article pages the article h1 is the largest text; `SiteBrand` stays a link at card-title size, never a heading (Google Scholar reads titles from the page).", "section": "typography" },
+      { "name": "The One Edge Rule", "body": "Every non-landing surface uses `PUBLIC_WIDTH`. Do not introduce new `max-w-*` page containers; cap content inside the container instead.", "section": "layout" },
+      { "name": "The Hairline Rule", "body": "Separate with a 1px `line` border or divider, not with a shadow or a fill.", "section": "elevation" },
+      { "name": "The Paper Bar Rule", "body": "The sticky bottom action bar of long forms (editor, profile, news) is the one translucent app surface: paper (mist on phones) at 95% with backdrop blur, top border, 12px radius from 640px.", "section": "elevation" }
+    ],
+    "dos": [
+      "**Do** use `.btn btn-primary` for the single main action of a view and `.btn-secondary` / `.btn-ghost` for everything else.",
+      "**Do** build every new page inside `PublicHeader` or `DashboardShell` with `PUBLIC_WIDTH`, a Literata h1 at 1.875rem / 2.25rem and a 40px page padding.",
+      "**Do** make cards clickable with the stretched title link and the card-level tile focus ring, as in `ArticleList`.",
+      "**Do** express status with `Chip` tones (neutral, lapis, tile, danger) and always with text.",
+      "**Do** separate content with 1px `line` hairlines and the mist/paper contrast.",
+      "**Do** give every motion a `prefers-reduced-motion` fallback; outside the landing limit motion to 150ms colour transitions, the chevron rotation and the loading pulse.",
+      "**Do** use inline SVG icons with a 2px stroke and round caps."
+    ],
+    "donts": [
+      "**Don't** add gradients, glows, textured backgrounds or new hues on app surfaces; the sky gradient and horizon line belong to the frozen landing.",
+      "**Don't** add shadows to cards, panels or buttons; shadows are for floating menus and tooltips only.",
+      "**Don't** introduce new radii beyond 8 / 12 / 16px and full.",
+      "**Don't** use Literata for buttons, labels, chips or form text.",
+      "**Don't** set text smaller than 12px or uppercase-tracked labels outside the frozen landing.",
+      "**Don't** use Unicode glyphs (✕, ✓, ←) as stand-alone icons; draw them as SVG.",
+      "**Don't** alter the official Asman logo, the Asman mark or their navy.",
+      "**Don't** port landing-only devices (scroll-driven reveals, logo float, blurred sticky header, drenched lapis CTA band) to other surfaces."
+    ]
+  }
+}

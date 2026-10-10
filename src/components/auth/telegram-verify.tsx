@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { getJson, postJson } from "@/lib/api-client";
 import type { FlowStatus, FlowView } from "@/lib/auth-types";
+import { safeNext } from "@/lib/safe-next";
 
 const WAITING: FlowStatus[] = ["pending", "awaiting_contact"];
 
@@ -96,8 +97,9 @@ export function TelegramVerify({ initialFlow, onRestart }: Props) {
     const res = await postJson<{ redirectTo: string }>("/api/auth/verify", { code: value });
     if (res.ok) {
       // To‘liq sahifa yuklanishi: yangi sessiya cookie’si bilan server sahifani qaytadan chizadi.
-      // replace — "orqaga" tugmasi kod kiritish sahifasiga qaytarmaydi
-      window.location.replace(res.redirectTo);
+      // replace — "orqaga" tugmasi kod kiritish sahifasiga qaytarmaydi. ?next= — kirishga olib kelgan sahifa
+      // (masalan, maqoladagi baho formasi); faqat saytning ichki manzili
+      window.location.replace(safeNext(new URLSearchParams(window.location.search).get("next")) ?? res.redirectTo);
       return;
     }
     setBusy(false);

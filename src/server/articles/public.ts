@@ -4,6 +4,7 @@ import { cacheTag } from "next/cache";
 import { titleIn } from "@/lib/article-rules";
 import { venueLine } from "@/lib/citation";
 import { yearOf } from "@/lib/format";
+import { LANGS, LANG_SUFFIX, type Lang } from "@/lib/langs";
 import { db } from "../db";
 import { articleAuthors, articles, profiles } from "../db/schema";
 import { authorTag } from "../profiles/service";
@@ -51,9 +52,16 @@ type ListRow = Parameters<typeof titleIn>[0] &
     issueSeq: number | null;
     byline: string;
   };
+/** titleIn qaytargan sarlavhaning tili (o‘sha tartibda): ro‘yxatda lang atributi uchun (WCAG 3.1.2) */
+const titleLang = (r: ListRow): Lang =>
+  r.lang && r[`title${LANG_SUFFIX[r.lang]}`] ? r.lang : (LANGS.find((l) => r[`title${LANG_SUFFIX[l]}`]) ?? "uz");
+
 const toItem = (r: ListRow) => ({
   id: r.id,
   title: titleIn(r),
+  lang: titleLang(r),
+  // Sahifa tilidagi sarlavha uchun (bosh sahifa /ru, /en); bo‘sh bo‘lsa — title
+  titles: { uz: r.titleUz ?? "", ru: r.titleRu ?? "", en: r.titleEn ?? "" },
   byline: r.byline,
   publishedAt: r.publishedAt,
   // Portaldagi joyi: "3-son, 12-maqola" (maqola raqami moderator belgilagunicha bo‘lmasligi mumkin)

@@ -1,106 +1,96 @@
+import Link from "next/link";
+import { localePath } from "@/i18n/lang";
 import { formatDate } from "@/lib/format";
-import type { ArticleRatings } from "@/server/ratings/service";
-import { RatingDeck, ReviewerName, type DeckItem } from "./rating-deck";
-import { RatingForm } from "./rating-form";
-import { s } from "./styles";
+import type { Lang } from "@/lib/langs";
+import type { ArticleRatings, RatingItem } from "@/server/ratings/service";
+import { RATING_DIALOG_ID, RatingDialog } from "./rating-dialog";
 import { Stars } from "./stars";
-import { T, formatAverage } from "./text";
+import { formatAverage, ratingText } from "./text";
+
+/** Ochiq turadigan iqtiboslar soni; qolganlari "Yana N ta" ostida — baribir statik HTML’da, har biri bir marta */
+const VISIBLE = 3;
 
 /**
- * Maqola sahifasidagi "Iqtiboslar" bo‘limi: o‘rtacha baho va taqsimot, 3D iqtiboslar to‘plami, baho berish formasi.
+ * Maqola sahifasining oxirgi bo‘limi "Iqtiboslar": maqola ustuni, turi va ranglarida — o‘rtacha baho sarlavha qatorida,
+ * iqtiboslar oddiy ro‘yxat, ostida baho berish formasi. <article>’dan tashqarida: Scholar uchun maqola matni emas.
  * Ro‘yxat statik HTML’da (qidiruv tizimlari ham ko‘radi), forma esa klientda sessiyani o‘zi tekshiradi.
  */
-export function RatingSection({ articleId, ratings }: { articleId: number; ratings: ArticleRatings }) {
-  const { count, avg, dist } = ratings;
-  const avgText = formatAverage(avg);
-  const items: DeckItem[] = ratings.items.map((r) => ({
-    id: r.id,
-    stars: r.stars,
-    body: r.body,
-    name: r.name,
-    slug: r.slug,
-    dateText: formatDate(r.date),
-    dateIso: new Date(r.date).toISOString(),
-  }));
+export function RatingSection({ articleId, ratings, lang = "uz" }: { articleId: number; ratings: ArticleRatings; lang?: Lang }) {
+  const T = ratingText[lang];
+  const { count, avg, items } = ratings;
+  const avgText = formatAverage(avg, lang);
+  const rest = items.slice(VISIBLE);
 
   return (
     <section
       id="iqtiboslar"
       aria-labelledby="iqtiboslar-title"
-      className={`${s.sky} mx-auto mt-16 max-w-5xl scroll-mt-6 px-5 py-8 sm:px-10 sm:py-10`}
+      className="mx-auto mt-12 max-w-3xl scroll-mt-6 break-words border-t border-line pt-8"
     >
-      <h2 id="iqtiboslar-title" className={s.title}>
-        {T.section.title}
-      </h2>
-
-      <div className="mt-6 grid grid-cols-[minmax(0,1fr)] items-center gap-8 sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-14">
-        <div>
-          {count > 0 && (
-            <p aria-hidden="true" className={`${s.numeral} mb-4`}>
-              {avgText}
-            </p>
-          )}
-          <Stars value={avg} label={count > 0 ? T.section.average(avgText) : undefined} className="text-2xl" />
-          <p className={`${s.muted} mt-2 text-sm`}>{count > 0 ? T.section.count(count) : T.section.empty}</p>
-        </div>
-        {count > 0 && (
-          <ul aria-label={T.section.distribution} className="w-full max-w-xl space-y-2.5">
-            {[5, 4, 3, 2, 1].map((star) => (
-              <li key={star} className="grid grid-cols-[1rem_minmax(0,1fr)_2rem] items-center gap-3 text-sm">
-                <span aria-hidden="true" className="tabular-nums">
-                  {star}
-                </span>
-                <span aria-hidden="true" className={s.track}>
-                  <span className={s.bar} style={{ width: `${(dist[star - 1] / count) * 100}%` }} />
-                </span>
-                <span aria-hidden="true" className={`${s.muted} text-right tabular-nums`}>
-                  {dist[star - 1]}
-                </span>
-                <span className="sr-only">{T.section.distributionRow(star, dist[star - 1])}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {/* minmax(0,1fr): keng yulduz tanlagich tor ekranda ustunni kengaytirib, matnni kesib qo‘ymasin */}
-      <div className="mt-10 grid grid-cols-[minmax(0,1fr)] items-start gap-10 border-t border-white/10 pt-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-12">
+      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+        <h2 id="iqtiboslar-title" className="font-serif text-lg font-semibold">
+          {T.section.title}
+        </h2>
         {count > 0 ? (
-          <RatingDeck items={items} />
-        ) : (
-          <div className={`${s.panel} flex min-h-56 flex-col justify-center`}>
-            <span aria-hidden="true" className={s.quoteMark}>
-              «
+          <p className="flex items-center gap-2 text-sm">
+            {/* Ekran o‘quvchi qiymatni yulduzlar label’idan oladi ("5 dan 4,3") — raqam ikki marta o‘qilmasin */}
+            <span aria-hidden="true" className="font-semibold tabular-nums">
+              {avgText}
             </span>
-            <p className={`${s.quote} mt-4`}>{T.deck.empty}</p>
-          </div>
+            <Stars value={avg} label={T.section.average(avgText)} className="text-base" />
+            <span className="text-muted">{T.section.count(count)}</span>
+          </p>
+        ) : (
+          <p className="text-sm text-muted">{T.section.empty}</p>
         )}
-        <RatingForm articleId={articleId} />
       </div>
 
-      {count > 0 && (
-        <details className={`${s.all} mt-10`}>
-          <summary>{T.section.all(count)}</summary>
-          <ol className="mt-4 divide-y divide-white/10">
-            {items.map((item) => (
-              <li key={item.id} className="py-5">
-                <figure>
-                  <blockquote className={s.quote}>{item.body}</blockquote>
-                  <figcaption className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                    <span className="font-semibold">
-                      <ReviewerName name={item.name} slug={item.slug} />
-                    </span>
-                    <Stars value={item.stars} label={T.deck.stars(item.stars)} />
-                    <time dateTime={item.dateIso} className={s.muted}>
-                      {item.dateText}
-                    </time>
-                  </figcaption>
-                </figure>
-              </li>
-            ))}
-          </ol>
+      {count > 0 && <Reviews items={items.slice(0, VISIBLE)} lang={lang} />}
+      {rest.length > 0 && (
+        <details className="group">
+          <summary className="btn btn-secondary mt-1 list-none [&::-webkit-details-marker]:hidden">
+            <span className="group-open:hidden">{T.section.more(rest.length)}</span>
+            <span className="hidden group-open:inline">{T.section.less}</span>
+          </summary>
+          <Reviews items={rest} lang={lang} />
         </details>
       )}
+
+      {/* Forma oynada (maqola tepasidagi «Iqtibos keltirish» ham shuni ochadi): kirmagan yoki muallif bo‘lsa — ogohlantirish */}
+      <button type="button" popoverTarget={RATING_DIALOG_ID} className={`btn btn-primary ${count > 0 ? "mt-6" : "mt-4"}`}>
+        {T.section.write}
+      </button>
+      <RatingDialog articleId={articleId} lang={lang} />
     </section>
+  );
+}
+
+function Reviews({ items, lang }: { items: RatingItem[]; lang: Lang }) {
+  const T = ratingText[lang];
+  return (
+    <ol className="mt-2 divide-y divide-line">
+      {items.map((r) => (
+        <li key={r.id} className="py-5">
+          <figure>
+            <figcaption className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+              <span className="font-semibold">
+                {r.slug ? (
+                  <Link href={localePath(lang, `/oqituvchi/${r.slug}`)} className="link">
+                    {r.name}
+                  </Link>
+                ) : (
+                  r.name
+                )}
+              </span>
+              <Stars value={r.stars} label={T.form.star(r.stars)} />
+              <time dateTime={new Date(r.date).toISOString()} className="text-muted">
+                {formatDate(r.date, lang)}
+              </time>
+            </figcaption>
+            <blockquote className="mt-2 max-w-[65ch] whitespace-pre-line leading-relaxed">{r.body}</blockquote>
+          </figure>
+        </li>
+      ))}
+    </ol>
   );
 }

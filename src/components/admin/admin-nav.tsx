@@ -12,17 +12,22 @@ const TABS = [
 
 export type AdminTab = (typeof TABS)[number]["key"];
 
-/** Admin bo‘limlari. current berilmasa (masalan, maqola sahifasida) hech bir tab tanlanmaydi. */
+/**
+ * Admin bo‘limlari. current berilmasa hech bir tab tanlanmaydi.
+ * Tor ekranda tablar yashirin surilmaydi — keyingi qatorga o‘raladi, hammasi ko‘rinib turadi. Chiziq har tab ostida,
+ * oxirgi qatorning bo‘sh qismini ::after to‘ldiradi (grow-[99]): har qator ostida yaxlit chiziq, tablar deyarli o‘z enida.
+ * Fokus halqasi tab ichida (! — globals.css’dagi qatlamsiz :focus-visible qoidasidan ustun bo‘lishi uchun).
+ */
 export function AdminNav({ current }: { current?: AdminTab }) {
   return (
-    <nav aria-label="Admin panel bo‘limlari" className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-      <ul className="flex min-w-max gap-1 border-b border-line text-sm">
+    <nav aria-label="Admin panel bo‘limlari">
+      <ul className="flex flex-wrap text-sm after:grow-[99] after:border-b after:border-line after:content-['']">
         {TABS.map((tab) => (
-          <li key={tab.key}>
+          <li key={tab.key} className="grow border-b border-line">
             <Link
               href={tab.href}
               aria-current={tab.key === current ? "page" : undefined}
-              className="-mb-px inline-block border-b-2 border-transparent px-3 py-2.5 font-medium text-muted transition-colors hover:text-ink focus-visible:-outline-offset-2 aria-[current=page]:border-lapis aria-[current=page]:text-ink"
+              className="-mb-px block border-b-2 border-transparent px-3 py-2.5 text-center font-medium text-muted transition-colors hover:text-ink focus-visible:-outline-offset-2! aria-[current=page]:border-lapis aria-[current=page]:text-ink"
             >
               {tab.label}
             </Link>

@@ -10,10 +10,12 @@ import { articleUrl } from "@/server/articles/seo";
 import { loadArticleView } from "@/server/articles/view";
 import { ArticleDrawer } from "./article-drawer";
 
+const TITLE_ID = "review-drawer-title";
+
 /**
  * Ro‘yxat ustida ochiladigan ko‘rib chiqish paneli: chapda maqola sahifasi qanday ochilishi, o‘ngda qaror.
  * Qoralama (hech qachon yuborilmagan) faqat muallifniki — adminga ko‘rsatilmaydi.
- * moderator — /moderator’dan: admin sahifasiga havola va saytdan olib tashlash yo‘q.
+ * moderator — /moderator’dan: saytdan olib tashlash yo‘q.
  */
 export async function ReviewDrawer({
   view,
@@ -30,22 +32,26 @@ export async function ReviewDrawer({
   const place = await issuePlaceStatus(v.id, v.issueNo, v.issueSeq);
 
   return (
-    <ArticleDrawer label={`Maqola №${v.id}`} closeHref={closeHref}>
+    <ArticleDrawer articleId={v.id} titleId={TITLE_ID} closeHref={closeHref}>
       <div className="flex h-full flex-col">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line bg-paper px-5 py-4 sm:px-8">
-          <p className="font-serif text-xl font-semibold">Maqola №{v.id}</p>
-          <StatusChip status={v.status} />
-          {v.submittedAt && <p className="text-sm text-muted">Yuborilgan: {formatDate(v.submittedAt)}</p>}
-          <div className="ml-auto flex items-center gap-2">
-            {!moderator && (
-              <Link href={`/admin/articles/${v.id}`} className="btn btn-ghost">
-                To‘liq sahifa
-              </Link>
-            )}
-            <Link href={closeHref} scroll={false} className="btn btn-secondary" aria-label="Panelni yopish">
-              <span aria-hidden="true">✕</span> Yopish
-            </Link>
+        <div className="flex items-start justify-between gap-4 border-b border-line bg-paper px-5 py-4 sm:px-8">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              {/* Panel nomi (aria-labelledby); ochilganda fokus shu yerda — u bosiladigan element emas, halqasiz */}
+              <h2 id={TITLE_ID} tabIndex={-1} className="font-serif text-xl font-semibold outline-none!">
+                Maqola №{v.id}
+              </h2>
+              <StatusChip status={v.status} />
+            </div>
+            {v.submittedAt && <p className="mt-1 text-sm text-muted">Yuborilgan: {formatDate(v.submittedAt)}</p>}
           </div>
+          {/* Telefonda faqat belgi (nomi aria-label’da): sarlavha va holat bir qatorga sig‘adi */}
+          <Link href={closeHref} scroll={false} className="btn btn-secondary shrink-0 max-sm:px-3" aria-label="Panelni yopish">
+            <svg viewBox="0 0 24 24" aria-hidden="true" className="size-4 max-sm:size-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+            <span className="max-sm:sr-only">Yopish</span>
+          </Link>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
@@ -63,13 +69,11 @@ export async function ReviewDrawer({
                 zenodoDoi={v.zenodoDoi ?? null}
               />
               {v.pdfBytes !== null && v.pdfBytes > ARTICLE_LIMITS.pdfScholarBytes && (
-                <p className="rounded-xl border border-line bg-paper p-4 text-sm text-muted">
-                  PDF {formatBytes(v.pdfBytes)}: 5 MB dan katta faylni Google Scholar o‘qimasligi mumkin.
-                </p>
+                <p className="text-sm text-muted">PDF {formatBytes(v.pdfBytes)} — Google Scholar uchun katta (5 MB gacha).</p>
               )}
             </aside>
             <div className="min-w-0 break-words">
-              <ArticleView v={v} absoluteUrl={articleUrl(v.id)} preview={v.status !== "published"} />
+              <ArticleView v={v} absoluteUrl={articleUrl(v.id)} preview={v.status !== "published"} allLangs />
             </div>
           </div>
         </div>
